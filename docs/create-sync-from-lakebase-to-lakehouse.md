@@ -5,7 +5,7 @@ Replicate all Lakebase Postgres tables into Unity Catalog as managed Delta table
 ## Prerequisites
 
 - Lakebase project on AWS (see [create-lakebase-instance.md](./create-lakebase-instance.md))
-- Unity Catalog destination (see [create-unity-catalog-instance.md](./create-unity-catalog-instance.md))
+- Unity Catalog destination with **external S3 storage root** (see [create-unity-catalog-instance.md](./create-unity-catalog-instance.md))
 
 ## Steps
 
@@ -14,10 +14,10 @@ Replicate all Lakebase Postgres tables into Unity Catalog as managed Delta table
 Connect to Lakebase via psql and check all tables:
 
 ```bash
-TOKEN=$(databricks auth token --profile DEFAULT | jq -r '.access_token')
+TOKEN=$(databricks auth token --profile <PROFILE> | jq -r '.access_token')
 PGPASSWORD="$TOKEN" psql \
-  -h ep-misty-truth-d1ys8dfq.database.us-west-2.cloud.databricks.com \
-  -U you@databricks.com \
+  -h <PGHOST> \
+  -U <your-email>@databricks.com \
   -d databricks_postgres
 ```
 
@@ -35,7 +35,7 @@ ORDER BY c.relname;
 
 ### 2. Set REPLICA IDENTITY FULL on all tables
 
-All 20 tables were on `default` and needed to be set to `FULL`:
+All tables must be set to `FULL` for Lakehouse Sync CDC to capture updates/deletes:
 
 ```sql
 ALTER TABLE accounts REPLICA IDENTITY FULL;
@@ -78,7 +78,7 @@ WHERE c.table_schema = 'public'
 ORDER BY c.table_name, c.ordinal_position;
 ```
 
-Result: only `uuid` columns were flagged. `uuid` is supported by Lakehouse Sync (maps to `STRING` in Delta) — no action needed.
+`uuid` columns will be flagged but are supported by Lakehouse Sync (maps to `STRING` in Delta) — no action needed.
 
 ### 4. Enable Lakehouse Sync (UI)
 
@@ -105,7 +105,7 @@ SELECT * FROM wal2delta.tables;
 Or check the destination tables in Unity Catalog:
 
 ```bash
-databricks tables list caspers-kitchen-prod lakebase --profile DEFAULT
+databricks tables list caspers-kitchen-prod lakebase --profile <PROFILE>
 ```
 
 ## Synced Tables

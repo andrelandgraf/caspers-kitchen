@@ -2,37 +2,72 @@
 
 Unity Catalog for synced Lakebase data and downstream analytics.
 
-## Resources Created
-
-| Resource | Value |
-|----------|-------|
-| Catalog | `caspers-kitchen-prod` |
-| Schema | `caspers-kitchen-prod.lakebase` (destination for Lakehouse Sync) |
+**Important:** Lakehouse Sync requires a catalog with an **external S3 storage root** — catalogs using Default Storage (the metastore-managed bucket) will not work.
 
 ## Steps
 
-### 1. Create the catalog
+### 1. Ensure a storage credential exists
 
-The CLI requires an explicit storage location, so we used a SQL statement through a warehouse instead (uses workspace default storage):
+A storage credential wraps an AWS IAM role that Unity Catalog can assume to read/write to S3. List existing credentials:
+
+```bash
+databricks storage-credentials list --profile <PROFILE>
+```
+
+If none exist with access to your target S3 bucket, create one (requires `CREATE_STORAGE_CREDENTIAL` privilege):
+
+```bash
+databricks storage-credentials create \
+  --json '{
+    "name": "<CREDENTIAL_NAME>",
+    "aws_iam_role": {
+      "role_arn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/<ROLE_NAME>"
+    }
+  }' \
+  --profile <PROFILE>
+```
+
+### 2. Create an external location
+
+An external location binds an S3 path to a storage credential. You need `CREATE EXTERNAL LOCATION` on the credential:
 
 ```bash
 databricks experimental aitools tools query \
-  "CREATE CATALOG IF NOT EXISTS \`caspers-kitchen-prod\` COMMENT 'Production catalog for Caspers Kitchen Lakebase sync'" \
-  --profile DEFAULT
+  "GRANT CREATE EXTERNAL LOCATION ON CREDENTIAL <CREDENTIAL_NAME> TO \`<your-email>\`" \
+  --profile <PROFILE>
 ```
 
-### 2. Create the destination schema
+Then create the location:
+
+```bash
+databricks external-locations create <LOCATION_NAME> \
+  "s3://<BUCKET>/<PATH>" \
+  <CREDENTIAL_NAME> \
+  --comment "External storage for Caspers Kitchen Lakebase sync" \
+  --profile <PROFILE>
+```
+
+### 3. Create the catalog with external storage root
+
+```bash
+databricks catalogs create caspers-kitchen-prod \
+  --storage-root "s3://<BUCKET>/<PATH>" \
+  --comment "Production catalog for Caspers Kitchen Lakebase sync" \
+  --profile <PROFILE>
+```
+
+### 4. Create the destination schema
 
 ```bash
 databricks experimental aitools tools query \
   "CREATE SCHEMA IF NOT EXISTS \`caspers-kitchen-prod\`.\`lakebase\` COMMENT 'Lakebase CDC sync tables'" \
-  --profile DEFAULT
+  --profile <PROFILE>
 ```
 
-### 3. Verify
+### 5. Verify
 
 ```bash
-databricks schemas list caspers-kitchen-prod --profile DEFAULT
+databricks schemas list caspers-kitchen-prod --profile <PROFILE>
 ```
 
 Expected output:
@@ -43,7 +78,17 @@ caspers-kitchen-prod.information_schema  (auto-created)
 caspers-kitchen-prod.lakebase            Lakebase CDC sync tables
 ```
 
+## What doesn't work
+
+Creating a catalog with **Default Storage** (the metastore-managed S3 bucket) does not support Lakehouse Sync:
+
+- SQL `CREATE CATALOG` without `MANAGED LOCATION` uses Default Storage
+- CLI `databricks catalogs create --storage-root <default-bucket-url>` is rejected with "Please use the UI to create a catalog with Default Storage"
+
+You must provide a non-default S3 path backed by a storage credential and external location.
+
 ## Notes
 
-- There is also a pre-existing `casper` catalog in the workspace with demo/analytics data. The new `caspers-kitchen-prod` catalog is dedicated to the production Lakebase sync pipeline.
 - The `lakebase` schema will contain `lb_<table_name>_history` Delta tables once Lakehouse Sync is enabled.
+- The storage credential's IAM role must have read/write access to the S3 path used as storage root.
+- The external location must cover the S3 path before `catalogs create --storage-root` will accept it.
