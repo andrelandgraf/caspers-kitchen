@@ -1,4 +1,3 @@
 {
-  "installCommand": "cd ../.. && npm install -w apps/api --ignore-scripts",
   "crons": [{ "path": "/api/cron/simulate", "schedule": "*/5 * * * *" }]
 }

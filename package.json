@@ -1,5 +1,4 @@
 {
   "name": "caspers-kitchen",
-  "private": true,
-  "workspaces": ["apps/*"]
+  "private": true
 }
