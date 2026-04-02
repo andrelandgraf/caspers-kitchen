@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 import { signUp, signIn } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,12 @@ import {
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
-import { Check, Loader2, Circle } from "lucide-react";
+import {
+  SupportCaseViewer,
+  type SupportMessage,
+} from "@/components/support-case-viewer";
+import { ArrowLeft, Check, Loader2, Circle } from "lucide-react";
+import Link from "next/link";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,15 +74,6 @@ interface SupportCase {
   id: string;
   subject: string;
   status: string;
-}
-
-interface SupportMessage {
-  id: string;
-  caseId: string;
-  userId: string | null;
-  adminId: string | null;
-  content: string;
-  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,16 +223,8 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
   const [messageText, setMessageText] = useState(
     "My order took forever to be delivered. It's cold and soggy.",
   );
-  const [messages, setMessages] = useState<SupportMessage[]>([]);
+  const [initialMessages, setInitialMessages] = useState<SupportMessage[]>([]);
   const [messageSent, setMessageSent] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
 
   // -------------------------------------------------------------------------
   // Step 1: Create User
@@ -419,10 +407,8 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
       if (!msgRes.ok) throw new Error("Failed to send message");
       const userMsg: SupportMessage = await msgRes.json();
 
-      setMessages([userMsg]);
+      setInitialMessages([userMsg]);
       setMessageSent(true);
-
-      startPolling(newCase.id);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Support ticket failed");
     } finally {
@@ -430,30 +416,21 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
     }
   }
 
-  const startPolling = useCallback((caseId: string) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/support/${caseId}/messages`);
-        if (!res.ok) return;
-        const msgs: SupportMessage[] = await res.json();
-        setMessages(msgs);
-      } catch {
-        // ignore polling errors
-      }
-    }, 5000);
-  }, []);
-
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
-
-  const adminMessages = messages.filter((m) => m.adminId !== null);
 
   return (
     <div className="flex flex-col flex-1">
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back
+          </Link>
           <span className="text-xl font-bold tracking-tight">
             Casper&apos;s Kitchen
           </span>
@@ -616,7 +593,7 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
           {currentStep === 4 && (
             <section className="space-y-4">
               <h2 className="text-lg font-semibold">Support Ticket</h2>
-              {!messageSent ? (
+              {!messageSent || !supportCase ? (
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <Label>Subject</Label>
@@ -639,43 +616,10 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {messages
-                    .filter((m) => m.adminId === null)
-                    .map((m) => (
-                      <div key={m.id} className="space-y-1">
-                        <p className="text-sm">{m.content}</p>
-                        <p className="text-xs text-muted-foreground">
-                          You · {new Date(m.createdAt).toLocaleTimeString()}
-                        </p>
-                      </div>
-                    ))}
-
-                  <Separator />
-
-                  {adminMessages.length === 0 ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="size-3.5 animate-spin" />
-                      Waiting for admin response…
-                    </div>
-                  ) : (
-                    adminMessages.map((m) => (
-                      <Card key={m.id} size="sm">
-                        <CardHeader>
-                          <CardTitle>Admin</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm">{m.content}</p>
-                        </CardContent>
-                        <CardFooter>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(m.createdAt).toLocaleTimeString()}
-                          </span>
-                        </CardFooter>
-                      </Card>
-                    ))
-                  )}
-                </div>
+                <SupportCaseViewer
+                  caseId={supportCase.id}
+                  initialMessages={initialMessages}
+                />
               )}
             </section>
           )}
