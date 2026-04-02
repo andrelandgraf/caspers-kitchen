@@ -1,0 +1,5 @@
+{
+  "$schema": "https://databricks.github.io/appkit/schemas/template-plugins.schema.json",
+  "version": "1.0",
+  "plugins": {}
+}

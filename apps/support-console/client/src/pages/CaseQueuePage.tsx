@@ -1,0 +1,143 @@
+import { Badge, Skeleton } from '@databricks/appkit-ui/react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { ActionBadge } from '../components/ActionBadge';
+
+interface CaseRow {
+  case_id: string;
+  user_name: string;
+  subject: string;
+  status: string;
+  case_created_at: string;
+  message_count: number;
+  has_admin_reply: boolean;
+  suggested_action: string | null;
+  suggested_amount_cents: number | null;
+  case_summary: string | null;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const variant = status === 'resolved' ? 'outline' : status === 'open' ? 'secondary' : 'default';
+  return <Badge variant={variant}>{status}</Badge>;
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+export function CaseQueuePage() {
+  const [cases, setCases] = useState<CaseRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch('/api/cases')
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to fetch cases: ${res.statusText}`);
+        return res.json() as Promise<CaseRow[]>;
+      })
+      .then(setCases)
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load cases'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const openCases = cases.filter((c) => c.status !== 'resolved' && c.status !== 'closed');
+  const resolvedCases = cases.filter((c) => c.status === 'resolved' || c.status === 'closed');
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-2xl font-bold tracking-tight">Cases</h2>
+        <span className="text-sm text-muted-foreground">
+          {openCases.length} open &middot; {resolvedCases.length} resolved
+        </span>
+      </div>
+
+      {error && (
+        <div className="text-destructive bg-destructive/10 p-3 rounded-md text-sm">{error}</div>
+      )}
+
+      {loading && (
+        <div className="space-y-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={`skel-${i}`} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      )}
+
+      {!loading && cases.length === 0 && (
+        <p className="text-muted-foreground text-center py-16">No support cases found.</p>
+      )}
+
+      {!loading && openCases.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
+            Needs attention
+          </h3>
+          {openCases.map((c) => (
+            <button
+              key={c.case_id}
+              type="button"
+              onClick={() => navigate(`/cases/${c.case_id}`)}
+              className="w-full text-left flex items-center gap-4 p-4 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium truncate">{c.subject}</span>
+                  <StatusBadge status={c.status} />
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{c.user_name}</span>
+                  <span>&middot;</span>
+                  <span>{c.message_count} messages</span>
+                  <span>&middot;</span>
+                  <span>{timeAgo(c.case_created_at)}</span>
+                </div>
+              </div>
+              {c.suggested_action && (
+                <ActionBadge action={c.suggested_action} amountCents={c.suggested_amount_cents} />
+              )}
+            </button>
+          ))}
+        </section>
+      )}
+
+      {!loading && resolvedCases.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
+            Resolved
+          </h3>
+          {resolvedCases.map((c) => (
+            <button
+              key={c.case_id}
+              type="button"
+              onClick={() => navigate(`/cases/${c.case_id}`)}
+              className="w-full text-left flex items-center gap-4 p-4 rounded-lg border border-border/30 hover:bg-muted/20 transition-colors opacity-60"
+            >
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium truncate">{c.subject}</span>
+                  <StatusBadge status={c.status} />
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{c.user_name}</span>
+                  <span>&middot;</span>
+                  <span>{c.message_count} messages</span>
+                </div>
+              </div>
+              {c.suggested_action && (
+                <ActionBadge action={c.suggested_action} amountCents={c.suggested_amount_cents} />
+              )}
+            </button>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}

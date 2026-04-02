@@ -1,0 +1,365 @@
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Button,
+  Input,
+  Badge,
+  Skeleton,
+  Separator,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@databricks/appkit-ui/react';
+import { useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router';
+import { ArrowLeft, Send, Check } from 'lucide-react';
+import { ActionBadge } from '../components/ActionBadge';
+
+interface CaseDetail {
+  case_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  user_region: string;
+  subject: string;
+  status: string;
+  case_created_at: string;
+  message_count: number;
+  has_admin_reply: boolean;
+  first_response_minutes: number | null;
+  linked_refund_cents: number;
+  linked_credit_cents: number;
+  user_lifetime_spend_cents: number;
+  user_cases_90d: number;
+}
+
+interface Message {
+  id: string;
+  role: 'customer' | 'admin';
+  content: string;
+  created_at: string;
+}
+
+interface AgentResponse {
+  case_summary: string;
+  suggested_response: string;
+  suggested_action: string;
+  suggested_amount_cents: number;
+  reasoning: string;
+  model: string;
+  generated_at: string;
+}
+
+interface UserProfile {
+  total_orders_90d: number;
+  total_spend_90d_cents: number;
+  lifetime_order_count: number;
+  lifetime_spend_cents: number;
+  support_cases_90d: number;
+  support_cases_lifetime: number;
+  total_refunds_90d_cents: number;
+  total_credits_90d_cents: number;
+}
+
+interface CaseDetailResponse {
+  case: CaseDetail;
+  messages: Message[];
+  agentResponse: AgentResponse | null;
+  userProfile: UserProfile | null;
+}
+
+function formatCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+export function CaseDetailPage() {
+  const { caseId } = useParams<{ caseId: string }>();
+  const [data, setData] = useState<CaseDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [draftResponse, setDraftResponse] = useState('');
+  const [draftAction, setDraftAction] = useState('no_action');
+  const [draftAmount, setDraftAmount] = useState('0');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (!caseId) return;
+    fetch(`/api/cases/${caseId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to fetch case: ${res.statusText}`);
+        return res.json() as Promise<CaseDetailResponse>;
+      })
+      .then((d) => {
+        setData(d);
+        if (d.agentResponse) {
+          setDraftResponse(d.agentResponse.suggested_response);
+          setDraftAction(d.agentResponse.suggested_action);
+          setDraftAmount(String(d.agentResponse.suggested_amount_cents));
+        }
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load case'))
+      .finally(() => setLoading(false));
+  }, [caseId]);
+
+  async function handleSubmit() {
+    if (!caseId || !draftResponse.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/cases/${caseId}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          case_id: caseId,
+          admin_action: draftAction,
+          admin_amount_cents: parseInt(draftAmount, 10) || 0,
+          admin_response: draftResponse.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to submit');
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Submit failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-5 gap-6">
+          <div className="col-span-3 space-y-3">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={`msg-${i}`} className="h-20 w-full rounded-lg" />
+            ))}
+          </div>
+          <div className="col-span-2">
+            <Skeleton className="h-96 w-full rounded-lg" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="text-destructive bg-destructive/10 p-4 rounded-md">{error ?? 'Case not found'}</div>
+      </div>
+    );
+  }
+
+  const { case: caseData, messages, agentResponse, userProfile } = data;
+
+  return (
+    <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <div className="flex items-center gap-4">
+        <Link
+          to="/"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </Link>
+        <Separator orientation="vertical" className="h-4" />
+        <h2 className="text-lg font-semibold">{caseData.subject}</h2>
+        <Badge variant={caseData.status === 'resolved' ? 'outline' : 'secondary'}>
+          {caseData.status}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-5 gap-6">
+        {/* Left: messages */}
+        <div className="col-span-3 space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm">Message Thread</CardTitle>
+                <span className="text-xs text-muted-foreground">{messages.length} messages</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-lg ${
+                    msg.role === 'customer'
+                      ? 'bg-muted/50 border border-border/30'
+                      : 'bg-foreground/5 border border-foreground/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      {msg.role}
+                    </span>
+                    <span className="text-xs text-muted-foreground/60">
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed">{msg.content}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {userProfile && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Customer Profile</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Name</span>
+                    <p className="font-medium">{caseData.user_name}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Region</span>
+                    <p className="font-medium">{caseData.user_region || 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Lifetime spend</span>
+                    <p className="font-medium font-mono">{formatCents(userProfile.lifetime_spend_cents)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Orders (90d)</span>
+                    <p className="font-medium">{userProfile.total_orders_90d}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Support cases (90d)</span>
+                    <p className="font-medium">{userProfile.support_cases_90d}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Refunds (90d)</span>
+                    <p className="font-medium font-mono">{formatCents(userProfile.total_refunds_90d_cents)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right: agent response + editor */}
+        <div className="col-span-2 space-y-4">
+          {agentResponse ? (
+            <>
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">AI Summary</CardTitle>
+                    <span className="text-xs text-muted-foreground font-mono">{agentResponse.model}</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-relaxed">{agentResponse.case_summary}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">Agent Recommendation</CardTitle>
+                    <ActionBadge
+                      action={agentResponse.suggested_action}
+                      amountCents={agentResponse.suggested_amount_cents}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs italic text-muted-foreground leading-relaxed">
+                    {agentResponse.reasoning}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">
+                    {submitted ? 'Decision Submitted' : 'Your Decision'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {submitted ? (
+                    <div className="flex items-center gap-2 text-sm text-success">
+                      <Check className="h-4 w-4" />
+                      Decision recorded successfully.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Action</label>
+                        <Select value={draftAction} onValueChange={setDraftAction}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="refund">Refund</SelectItem>
+                            <SelectItem value="credit">Credit</SelectItem>
+                            <SelectItem value="no_action">No action</SelectItem>
+                            <SelectItem value="escalate">Escalate</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {(draftAction === 'refund' || draftAction === 'credit') && (
+                        <div className="space-y-2">
+                          <label className="text-xs text-muted-foreground">Amount (cents)</label>
+                          <Input
+                            type="number"
+                            value={draftAmount}
+                            onChange={(e) => setDraftAmount(e.target.value)}
+                            min={0}
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Response to customer</label>
+                        <textarea
+                          value={draftResponse}
+                          onChange={(e) => setDraftResponse(e.target.value)}
+                          rows={5}
+                          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                      </div>
+
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={submitting || !draftResponse.trim()}
+                        className="w-full"
+                      >
+                        {submitting ? (
+                          'Submitting...'
+                        ) : (
+                          <>
+                            <Send className="h-3.5 w-3.5 mr-1.5" />
+                            Approve & Send
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No agent response available for this case.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
