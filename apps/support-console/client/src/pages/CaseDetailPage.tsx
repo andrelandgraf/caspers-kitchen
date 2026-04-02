@@ -176,8 +176,8 @@ export function CaseDetailPage() {
       </div>
 
       <div className="grid grid-cols-5 gap-6">
-        {/* Left: messages + customer profile */}
-        <div className="col-span-2 space-y-6">
+        {/* Center: messages + decision */}
+        <div className="col-span-3 space-y-6">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -208,6 +208,122 @@ export function CaseDetailPage() {
               ))}
             </CardContent>
           </Card>
+
+          {agentResponse ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">
+                  {submitted ? 'Decision Submitted' : 'Your Decision'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {submitted ? (
+                  <div className="flex items-center gap-2 text-sm text-success">
+                    <Check className="h-4 w-4" />
+                    Decision recorded successfully.
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">Action</label>
+                      <Select value={draftAction} onValueChange={setDraftAction}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="refund">Refund</SelectItem>
+                          <SelectItem value="credit">Credit</SelectItem>
+                          <SelectItem value="no_action">No action</SelectItem>
+                          <SelectItem value="escalate">Escalate</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {(draftAction === 'refund' || draftAction === 'credit') && (
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Amount (cents)</label>
+                        <Input
+                          type="number"
+                          value={draftAmount}
+                          onChange={(e) => setDraftAmount(e.target.value)}
+                          min={0}
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">Response to customer</label>
+                      <textarea
+                        value={draftResponse}
+                        onChange={(e) => setDraftResponse(e.target.value)}
+                        rows={5}
+                        className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
+                    </div>
+
+                    <Button
+                      onClick={handleSubmit}
+                      disabled={submitting || !draftResponse.trim()}
+                      className="w-full"
+                    >
+                      {submitting ? (
+                        'Submitting...'
+                      ) : (
+                        <>
+                          <Send className="h-3.5 w-3.5 mr-1.5" />
+                          Approve & Send
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No agent response available for this case.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Right sidebar: AI context + customer profile */}
+        <div className="col-span-2 space-y-4">
+          {agentResponse && (
+            <>
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">AI Summary</CardTitle>
+                    <span className="text-xs text-muted-foreground font-mono">{agentResponse.model}</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-relaxed">{agentResponse.case_summary}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm">Agent Recommendation</CardTitle>
+                    <ActionBadge
+                      action={agentResponse.suggested_action}
+                      amountCents={agentResponse.suggested_amount_cents}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs italic text-muted-foreground leading-relaxed">
+                    {agentResponse.reasoning}
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {userProfile && (
             <Card>
@@ -241,120 +357,6 @@ export function CaseDetailPage() {
                     <p className="font-medium font-mono">{formatCents(userProfile.total_refunds_90d_cents)}</p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Center: agent response + decision editor */}
-        <div className="col-span-3 space-y-4">
-          {agentResponse ? (
-            <>
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">AI Summary</CardTitle>
-                    <span className="text-xs text-muted-foreground font-mono">{agentResponse.model}</span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm leading-relaxed">{agentResponse.case_summary}</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">Agent Recommendation</CardTitle>
-                    <ActionBadge
-                      action={agentResponse.suggested_action}
-                      amountCents={agentResponse.suggested_amount_cents}
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-xs italic text-muted-foreground leading-relaxed">
-                    {agentResponse.reasoning}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">
-                    {submitted ? 'Decision Submitted' : 'Your Decision'}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {submitted ? (
-                    <div className="flex items-center gap-2 text-sm text-success">
-                      <Check className="h-4 w-4" />
-                      Decision recorded successfully.
-                    </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">Action</label>
-                        <Select value={draftAction} onValueChange={setDraftAction}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="refund">Refund</SelectItem>
-                            <SelectItem value="credit">Credit</SelectItem>
-                            <SelectItem value="no_action">No action</SelectItem>
-                            <SelectItem value="escalate">Escalate</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {(draftAction === 'refund' || draftAction === 'credit') && (
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground">Amount (cents)</label>
-                          <Input
-                            type="number"
-                            value={draftAmount}
-                            onChange={(e) => setDraftAmount(e.target.value)}
-                            min={0}
-                          />
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">Response to customer</label>
-                        <textarea
-                          value={draftResponse}
-                          onChange={(e) => setDraftResponse(e.target.value)}
-                          rows={5}
-                          className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                      </div>
-
-                      <Button
-                        onClick={handleSubmit}
-                        disabled={submitting || !draftResponse.trim()}
-                        className="w-full"
-                      >
-                        {submitting ? (
-                          'Submitting...'
-                        ) : (
-                          <>
-                            <Send className="h-3.5 w-3.5 mr-1.5" />
-                            Approve & Send
-                          </>
-                        )}
-                      </Button>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No agent response available for this case.
-                </p>
               </CardContent>
             </Card>
           )}
