@@ -33,7 +33,10 @@ export async function signUpNewUsers(
     const client = createApiClient();
     const res = await client.signUp({ name: full, email, password });
 
-    if (!res.ok) continue;
+    if (!res.ok) {
+      console.error("[sim] signup failed for", email, JSON.stringify(res.data));
+      continue;
+    }
 
     const userData = res.data as { user?: { id: string } };
     const userId = userData.user?.id;
