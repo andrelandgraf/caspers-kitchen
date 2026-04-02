@@ -6,7 +6,7 @@ resources:
       trigger:
         periodic:
           interval: 1
-          unit: HOURS
+          unit: MINUTES
 
       parameters:
         - name: catalog

@@ -5,8 +5,8 @@ resources:
 
       trigger:
         periodic:
-          interval: 1
-          unit: DAYS
+          interval: 30
+          unit: MINUTES
 
       tasks:
         - task_key: refresh_pipeline
