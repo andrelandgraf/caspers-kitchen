@@ -35,6 +35,14 @@ const SubmitDecisionBody = z.object({
   admin_response: z.string().min(1),
 });
 
+const UpdateStatusBody = z.object({
+  status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
+});
+
+function hexToUuid(hex: string): string {
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join('-');
+}
+
 export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
   try {
     const { rows } = await appkit.lakebase.query(ADMIN_DECISIONS_EXISTS_SQL);
@@ -90,7 +98,8 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           caseId.slice(20, 32),
         ].join('-');
 
-        const caseResult = await appkit.lakebase.query(`
+        const caseResult = await appkit.lakebase.query(
+          `
           SELECT
             encode(sc.case_id, 'hex') AS case_id,
             sc.user_id,
@@ -109,14 +118,17 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             sc.user_cases_90d
           FROM gold.support_case_context_sync sc
           WHERE encode(sc.case_id, 'hex') = $1
-        `, [caseId]);
+        `,
+          [caseId]
+        );
 
         if (caseResult.rows.length === 0) {
           res.status(404).json({ error: 'Case not found' });
           return;
         }
 
-        const messagesResult = await appkit.lakebase.query(`
+        const messagesResult = await appkit.lakebase.query(
+          `
           SELECT
             id::text AS id,
             CASE WHEN admin_id IS NOT NULL THEN 'admin' ELSE 'customer' END AS role,
@@ -125,9 +137,12 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           FROM public.support_messages
           WHERE case_id::text = $1
           ORDER BY created_at ASC
-        `, [caseIdUuid]);
+        `,
+          [caseIdUuid]
+        );
 
-        const agentResult = await appkit.lakebase.query(`
+        const agentResult = await appkit.lakebase.query(
+          `
           SELECT
             case_summary,
             suggested_response,
@@ -138,9 +153,12 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             generated_at
           FROM gold.support_agent_responses_sync
           WHERE encode(case_id, 'hex') = $1
-        `, [caseId]);
+        `,
+          [caseId]
+        );
 
-        const profileResult = await appkit.lakebase.query(`
+        const profileResult = await appkit.lakebase.query(
+          `
           SELECT
             total_orders_90d,
             total_spend_90d_cents,
@@ -152,7 +170,9 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             total_credits_90d_cents
           FROM gold.user_support_profile_sync
           WHERE user_id = $1
-        `, [caseResult.rows[0].user_id as string]);
+        `,
+          [caseResult.rows[0].user_id as string]
+        );
 
         res.json({
           case: caseResult.rows[0],
@@ -176,15 +196,44 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
         }
 
         const caseIdBytes = Buffer.from(caseId, 'hex');
+        const caseIdUuid = hexToUuid(caseId);
 
-        const result = await appkit.lakebase.query(
-          `INSERT INTO support_console.admin_decisions (case_id, admin_action, admin_amount_cents, admin_response)
-           VALUES ($1, $2, $3, $4)
+        const adminResult = await appkit.lakebase.query(`SELECT id FROM public.admins LIMIT 1`);
+        const adminId = adminResult.rows.length > 0 ? (adminResult.rows[0].id as string) : null;
+
+        const decisionResult = await appkit.lakebase.query(
+          `INSERT INTO support_console.admin_decisions (id, case_id, admin_action, admin_amount_cents, admin_response)
+           VALUES (
+             (SELECT COALESCE(MAX(id), 0) + 1 FROM support_console.admin_decisions),
+             $1, $2, $3, $4
+           )
            RETURNING id, admin_action, admin_amount_cents, admin_response, created_at`,
-          [caseIdBytes, parsed.data.admin_action, parsed.data.admin_amount_cents, parsed.data.admin_response],
+          [caseIdBytes, parsed.data.admin_action, parsed.data.admin_amount_cents, parsed.data.admin_response]
         );
 
-        res.status(201).json(result.rows[0]);
+        let message: Record<string, unknown> | null = null;
+        if (adminId) {
+          const msgResult = await appkit.lakebase.query(
+            `INSERT INTO public.support_messages (case_id, admin_id, content)
+             VALUES ($1::uuid, $2::uuid, $3)
+             RETURNING id::text AS id, 'admin' AS role, content, created_at`,
+            [caseIdUuid, adminId, parsed.data.admin_response]
+          );
+          message = msgResult.rows[0] ?? null;
+
+          await appkit.lakebase.query(
+            `UPDATE public.support_cases
+             SET status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
+                 updated_at = NOW()
+             WHERE id = $1::uuid`,
+            [caseIdUuid]
+          );
+        }
+
+        res.status(201).json({
+          ...decisionResult.rows[0],
+          message,
+        });
       } catch (err) {
         console.error('Failed to submit decision:', err);
         res.status(500).json({ error: 'Failed to submit decision' });
@@ -201,13 +250,38 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
            FROM support_console.admin_decisions
            WHERE case_id = $1
            ORDER BY created_at DESC`,
-          [caseIdBytes],
+          [caseIdBytes]
         );
 
         res.json(result.rows);
       } catch (err) {
         console.error('Failed to get decisions:', err);
         res.status(500).json({ error: 'Failed to get decisions' });
+      }
+    });
+
+    app.patch('/api/cases/:caseId/status', async (req, res) => {
+      try {
+        const caseId = req.params.caseId;
+        const parsed = UpdateStatusBody.safeParse(req.body);
+        if (!parsed.success) {
+          res.status(400).json({ error: 'Invalid request body', details: parsed.error.issues });
+          return;
+        }
+
+        const caseIdUuid = hexToUuid(caseId);
+
+        await appkit.lakebase.query(
+          `UPDATE public.support_cases
+           SET status = $1, updated_at = NOW()
+           WHERE id = $2::uuid`,
+          [parsed.data.status, caseIdUuid]
+        );
+
+        res.json({ status: parsed.data.status });
+      } catch (err) {
+        console.error('Failed to update case status:', err);
+        res.status(500).json({ error: 'Failed to update case status' });
       }
     });
   });

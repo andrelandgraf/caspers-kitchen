@@ -72,6 +72,12 @@ interface CaseDetailResponse {
   userProfile: UserProfile | null;
 }
 
+interface DecisionResponse {
+  message: Message | null;
+}
+
+const CASE_STATUSES = ['open', 'in_progress', 'resolved', 'closed'] as const;
+
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
@@ -88,6 +94,9 @@ export function CaseDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  const [caseStatus, setCaseStatus] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   useEffect(() => {
     if (!caseId) return;
     fetch(`/api/cases/${caseId}`)
@@ -97,6 +106,7 @@ export function CaseDetailPage() {
       })
       .then((d) => {
         setData(d);
+        setCaseStatus(d.case.status);
         if (d.agentResponse) {
           setDraftResponse(d.agentResponse.suggested_response);
           setDraftAction(d.agentResponse.suggested_action);
@@ -122,11 +132,36 @@ export function CaseDetailPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to submit');
+      const result = (await res.json()) as DecisionResponse;
+      if (result.message && data) {
+        setData({
+          ...data,
+          messages: [...data.messages, result.message],
+        });
+      }
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submit failed');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleStatusChange(newStatus: string) {
+    if (!caseId || newStatus === caseStatus) return;
+    setUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/cases/${caseId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error('Failed to update status');
+      setCaseStatus(newStatus);
+    } catch (err) {
+      console.error('Status update failed:', err);
+    } finally {
+      setUpdatingStatus(false);
     }
   }
 
@@ -170,8 +205,8 @@ export function CaseDetailPage() {
         </Link>
         <Separator orientation="vertical" className="h-4" />
         <h2 className="text-lg font-semibold">{caseData.subject}</h2>
-        <Badge variant={caseData.status === 'resolved' ? 'outline' : 'secondary'}>
-          {caseData.status}
+        <Badge variant={caseStatus === 'resolved' || caseStatus === 'closed' ? 'outline' : 'secondary'}>
+          {caseStatus}
         </Badge>
       </div>
 
@@ -212,9 +247,7 @@ export function CaseDetailPage() {
           {agentResponse ? (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">
-                  {submitted ? 'Decision Submitted' : 'Your Decision'}
-                </CardTitle>
+                <CardTitle className="text-sm">{submitted ? 'Decision Submitted' : 'Your Decision'}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {submitted ? (
@@ -261,11 +294,7 @@ export function CaseDetailPage() {
                       />
                     </div>
 
-                    <Button
-                      onClick={handleSubmit}
-                      disabled={submitting || !draftResponse.trim()}
-                      className="w-full"
-                    >
+                    <Button onClick={handleSubmit} disabled={submitting || !draftResponse.trim()} className="w-full">
                       {submitting ? (
                         'Submitting...'
                       ) : (
@@ -282,16 +311,35 @@ export function CaseDetailPage() {
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No agent response available for this case.
-                </p>
+                <p className="text-sm text-muted-foreground">No agent response available for this case.</p>
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* Right sidebar: AI context + customer profile */}
+        {/* Right sidebar: status, AI context, customer profile */}
         <div className="col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Case Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Select value={caseStatus} onValueChange={handleStatusChange} disabled={updatingStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CASE_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.replace('_', ' ')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {updatingStatus && <p className="text-xs text-muted-foreground">Updating...</p>}
+            </CardContent>
+          </Card>
+
           {agentResponse && (
             <>
               <Card>
@@ -317,9 +365,7 @@ export function CaseDetailPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-xs italic text-muted-foreground leading-relaxed">
-                    {agentResponse.reasoning}
-                  </p>
+                  <p className="text-xs italic text-muted-foreground leading-relaxed">{agentResponse.reasoning}</p>
                 </CardContent>
               </Card>
             </>

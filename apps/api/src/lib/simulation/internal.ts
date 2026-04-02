@@ -223,11 +223,81 @@ export async function progressDeliveries(): Promise<number> {
 
 const REFUND_PATTERN = /refund/i;
 const CREDIT_PATTERN = /credit/i;
+const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+
+type AgentDraft = {
+  suggested_response: string;
+  suggested_action: "refund" | "credit" | "no_action" | "escalate";
+  suggested_amount_cents: number;
+};
+
+const VALID_AGENT_ACTIONS = new Set([
+  "refund",
+  "credit",
+  "no_action",
+  "escalate",
+]);
+
+function isValidAction(val: unknown): val is AgentDraft["suggested_action"] {
+  return typeof val === "string" && VALID_AGENT_ACTIONS.has(val);
+}
+
+let agentTableAvailable: boolean | null = null;
+
+async function fetchAgentDraft(caseId: string): Promise<AgentDraft | null> {
+  if (agentTableAvailable === false) return null;
+
+  try {
+    const caseIdHex = caseId.replace(/-/g, "");
+    const result = await db.execute(
+      sql`SELECT suggested_response, suggested_action, suggested_amount_cents
+          FROM gold.support_agent_responses_sync
+          WHERE encode(case_id, 'hex') = ${caseIdHex}
+          LIMIT 1`,
+    );
+
+    if (agentTableAvailable === null) agentTableAvailable = true;
+
+    const row = result.rows[0];
+    if (!row) return null;
+
+    const action = row.suggested_action;
+    if (!isValidAction(action)) return null;
+
+    return {
+      suggested_response: String(row.suggested_response ?? ""),
+      suggested_action: action,
+      suggested_amount_cents: Number(row.suggested_amount_cents ?? 0),
+    };
+  } catch {
+    if (agentTableAvailable === null) {
+      console.warn(
+        "[sim] gold.support_agent_responses_sync not available, using fallback",
+      );
+      agentTableAvailable = false;
+    }
+    return null;
+  }
+}
+
+function tweakResponse(response: string): string {
+  const prefixes = [
+    "Hi there! ",
+    "Thank you for your patience. ",
+    "I appreciate you reaching out. ",
+  ];
+  return pick(prefixes) + response;
+}
+
+function tweakAmount(amount: number): number {
+  const factor = 0.8 + Math.random() * 0.4;
+  return Math.round(amount * factor);
+}
 
 export async function adminRepliesAndResolution(): Promise<number> {
   let actions = 0;
   const now = new Date();
-  const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  const threeHoursAgo = new Date(now.getTime() - THREE_HOURS_MS);
 
   const adminList = await db.select().from(admins);
   if (adminList.length === 0) return 0;
@@ -239,8 +309,6 @@ export async function adminRepliesAndResolution(): Promise<number> {
 
   for (const supportCase of openCases) {
     try {
-      if (supportCase.createdAt > twoHoursAgo) continue;
-
       const existingAdminMessages = await db
         .select({ id: supportMessages.id })
         .from(supportMessages)
@@ -256,8 +324,38 @@ export async function adminRepliesAndResolution(): Promise<number> {
 
       if (Math.random() > 0.5) continue;
 
+      const draft = await fetchAgentDraft(supportCase.id);
+
+      if (!draft && supportCase.createdAt > threeHoursAgo) continue;
+
       const admin = pick(adminList);
-      const reply = pick(SUPPORT_ADMIN_REPLIES);
+      let reply: string;
+      let action: AgentDraft["suggested_action"] = "no_action";
+      let amountCents = 0;
+
+      if (draft) {
+        const roll = Math.random();
+        if (roll < 0.8) {
+          reply = draft.suggested_response;
+          action = draft.suggested_action;
+          amountCents = draft.suggested_amount_cents;
+        } else if (roll < 0.95) {
+          reply = tweakResponse(draft.suggested_response);
+          action = draft.suggested_action;
+          amountCents = tweakAmount(draft.suggested_amount_cents);
+        } else {
+          reply = pick(SUPPORT_ADMIN_REPLIES);
+          action = "no_action";
+          amountCents = 0;
+        }
+      } else {
+        reply = pick(SUPPORT_ADMIN_REPLIES);
+        if (REFUND_PATTERN.test(reply)) {
+          action = "refund";
+        } else if (CREDIT_PATTERN.test(reply)) {
+          action = "credit";
+        }
+      }
 
       await db.insert(supportMessages).values({
         caseId: supportCase.id,
@@ -272,7 +370,7 @@ export async function adminRepliesAndResolution(): Promise<number> {
           .where(eq(supportCases.id, supportCase.id));
       }
 
-      if (REFUND_PATTERN.test(reply)) {
+      if (action === "refund") {
         const [latestOrder] = await db
           .select()
           .from(orders)
@@ -281,20 +379,27 @@ export async function adminRepliesAndResolution(): Promise<number> {
           .limit(1);
 
         if (latestOrder) {
+          const refundAmount =
+            amountCents > 0
+              ? Math.min(amountCents, latestOrder.totalInCents)
+              : latestOrder.totalInCents;
           await db.insert(refunds).values({
             userId: supportCase.userId,
             orderId: latestOrder.id,
             supportCaseId: supportCase.id,
-            amountInCents: latestOrder.totalInCents,
+            amountInCents: refundAmount,
             reason: reply,
           });
         }
-      } else if (CREDIT_PATTERN.test(reply)) {
-        const creditAmountInCents = 500 + Math.floor(Math.random() * 1000);
+      } else if (action === "credit") {
+        const creditAmount =
+          amountCents > 0
+            ? amountCents
+            : 500 + Math.floor(Math.random() * 1000);
         await db.insert(credits).values({
           userId: supportCase.userId,
           supportCaseId: supportCase.id,
-          amountInCents: creditAmountInCents,
+          amountInCents: creditAmount,
           reason: reply,
         });
       }
