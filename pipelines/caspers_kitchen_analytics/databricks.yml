@@ -1,0 +1,34 @@
+bundle:
+  name: caspers_kitchen_analytics
+  uuid: e76f907b-9c54-49a6-8ba1-8926a0f9f41c
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: The Unity Catalog catalog for all pipeline output
+  schema:
+    description: The default schema (silver tables land here; gold uses fully-qualified names)
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-df6b51a2-a992.cloud.databricks.com
+    variables:
+      catalog: caspers-kitchen-prod
+      schema: silver
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-df6b51a2-a992.cloud.databricks.com
+      root_path: /Workspace/Users/andre.landgraf@databricks.com/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: caspers-kitchen-prod
+      schema: silver
+    permissions:
+      - user_name: andre.landgraf@databricks.com
+        level: CAN_MANAGE

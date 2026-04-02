@@ -1,0 +1,13 @@
+resources:
+  pipelines:
+    caspers_kitchen_analytics:
+      name: caspers_kitchen_analytics
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+
+      libraries:
+        - glob:
+            include: ../src/silver/**
+        - glob:
+            include: ../src/gold/**

@@ -1,0 +1,14 @@
+resources:
+  jobs:
+    caspers_kitchen_analytics_job:
+      name: caspers_kitchen_analytics_job
+
+      trigger:
+        periodic:
+          interval: 1
+          unit: DAYS
+
+      tasks:
+        - task_key: refresh_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.caspers_kitchen_analytics.id}
