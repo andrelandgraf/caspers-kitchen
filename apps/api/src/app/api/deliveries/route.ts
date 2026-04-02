@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     .values({
       orderId: body.orderId,
       driverId: body.driverId,
-      startedAt: new Date(),
+      startedAt: body.startedAt ? new Date(body.startedAt) : new Date(),
     })
     .returning();
 
