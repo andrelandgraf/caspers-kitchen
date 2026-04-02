@@ -18,6 +18,12 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const code = (err as Record<string, unknown>)?.code;
+    const cause =
+      err instanceof Error && err.cause instanceof Error
+        ? err.cause.message
+        : undefined;
+    console.error("[cron/seed]", message, { code, cause });
+    return NextResponse.json({ error: message, code, cause }, { status: 500 });
   }
 }
