@@ -1,8 +1,6 @@
-/**
- * Smoke test: connect to the database via Drizzle and run a simple query.
- * Usage: bun run db:smoke
- */
 import { loadEnvConfig } from "@next/env";
+
+// Load Next.js environment variables before accessing process.env
 loadEnvConfig(process.cwd());
 
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -12,6 +10,7 @@ import { Pool } from "pg";
 async function main() {
   let pool: Pool;
 
+  // Connect via Lakebase (PGHOST) or plain Postgres (DATABASE_URL)
   if (process.env.PGHOST) {
     console.log("Mode: Lakebase");
     console.log(`  Host: ${process.env.PGHOST}`);
@@ -19,28 +18,28 @@ async function main() {
     console.log(
       `  Auth: ${process.env.DATABRICKS_TOKEN ? "CLI token" : "M2M OAuth"}`,
     );
-
     const { createLakebasePool } = await import("../src/lib/lakebase/pool");
     pool = createLakebasePool();
   } else if (process.env.DATABASE_URL) {
     console.log("Mode: DATABASE_URL");
     pool = new Pool({ connectionString: process.env.DATABASE_URL });
   } else {
-    console.error("Neither PGHOST nor DATABASE_URL is set");
-    process.exit(1);
+    throw new Error("Neither PGHOST nor DATABASE_URL is set");
   }
 
   const db = drizzle({ client: pool });
 
   try {
+    // Verify basic connectivity
     console.log("\nConnecting...");
     const result = await db.execute(
       sql`SELECT version(), now() AS server_time`,
     );
-    const row = result.rows[0] as { version: string; server_time: string };
-    console.log(`  PG version: ${row.version}`);
-    console.log(`  Server time: ${row.server_time}`);
+    const row = result.rows[0];
+    console.log(`  PG version: ${String(row?.version)}`);
+    console.log(`  Server time: ${String(row?.server_time)}`);
 
+    // List all user-created tables
     const tables = await db.execute(sql`
       SELECT table_schema, table_name
       FROM information_schema.tables
@@ -48,11 +47,8 @@ async function main() {
       ORDER BY table_schema, table_name
     `);
     console.log(`\nTables found: ${tables.rows.length}`);
-    for (const t of tables.rows as {
-      table_schema: string;
-      table_name: string;
-    }[]) {
-      console.log(`  ${t.table_schema}.${t.table_name}`);
+    for (const t of tables.rows) {
+      console.log(`  ${String(t.table_schema)}.${String(t.table_name)}`);
     }
 
     console.log("\nSmoke test passed.");
@@ -64,4 +60,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

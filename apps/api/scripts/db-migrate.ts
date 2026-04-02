@@ -1,8 +1,15 @@
 import { loadEnvConfig } from "@next/env";
+
+// Load Next.js environment variables before accessing process.env
 loadEnvConfig(process.cwd());
 
-import { execSync } from "child_process";
+import { execSync } from "node:child_process";
 
+/**
+ * Fetches a short-lived Lakebase credential and returns a full connection URL.
+ * Drizzle-kit needs a plain DATABASE_URL — it can't use pg's password callback —
+ * so we build the URL here and pass it via env to the subprocess.
+ */
 async function buildLakebaseUrl(): Promise<string> {
   const host = process.env.PGHOST;
   const port = process.env.PGPORT ?? "5432";
@@ -18,6 +25,7 @@ async function buildLakebaseUrl(): Promise<string> {
     );
   }
 
+  // Exchange the workspace access token for a short-lived Postgres credential
   const resp = await fetch(`${databricksHost}/api/2.0/postgres/credentials`, {
     method: "POST",
     headers: {
@@ -35,20 +43,31 @@ async function buildLakebaseUrl(): Promise<string> {
     );
   }
 
-  const data = (await resp.json()) as { token: string };
+  // Validate the response shape
+  const data: unknown = await resp.json();
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    !("token" in data) ||
+    typeof data.token !== "string"
+  ) {
+    throw new Error("Invalid credential response from Lakebase API");
+  }
+
   const password = encodeURIComponent(data.token);
   const encodedUser = encodeURIComponent(user);
-
   return `postgresql://${encodedUser}:${password}@${host}:${port}/${database}?sslmode=require`;
 }
 
 async function main() {
+  // When PGHOST is set (Lakebase), build a credential URL for drizzle-kit
   if (process.env.PGHOST && !process.env.DATABASE_URL) {
     console.log("Lakebase detected — fetching credential for drizzle-kit…");
     process.env.DATABASE_URL = await buildLakebaseUrl();
     console.log("Credential acquired, running migration…");
   }
 
+  // Run drizzle-kit migrate (reads DATABASE_URL from drizzle.config.ts)
   execSync("npx drizzle-kit migrate", {
     stdio: "inherit",
     env: { ...process.env },
