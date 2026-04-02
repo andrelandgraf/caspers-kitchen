@@ -26,7 +26,6 @@ export type TickResult = {
   multipliers: ComputedMultipliers;
   durationMs: number;
   error?: string;
-  debug?: Record<string, unknown>;
 };
 
 async function loadConfig(): Promise<TrafficConfig> {
@@ -116,22 +115,10 @@ export async function runTick(): Promise<TickResult> {
     promo: {},
     geo: {},
   };
-  let debugInfo: Record<string, unknown> = {
-    configVersion: activeConfigRow?.version ?? null,
-    signupsPerTick: config.baseRates.signupsPerTick,
-  };
-
   try {
     const promoMultipliers = await getActivePromoMultipliers();
     const shape = computeTickShape(config, promoMultipliers, now);
     multipliers = shape.multipliers;
-    debugInfo = {
-      ...debugInfo,
-      shapeSignups: shape.signups,
-      shapeActiveUsers: shape.activeUsers,
-      shapeCartAdds: shape.cartAdds,
-      shapeCheckouts: shape.checkouts,
-    };
 
     // Step 1: Sign up new users via API
     const newUsers = await signUpNewUsers(shape.signups, shape.regionWeights);
@@ -205,6 +192,5 @@ export async function runTick(): Promise<TickResult> {
     multipliers,
     durationMs: Date.now() - startTime,
     error,
-    debug: debugInfo,
   };
 }
