@@ -176,6 +176,82 @@ These are not yet implemented. They require a separate Python Databricks Job tha
 - `gold.support_message_sentiment` -- per-message sentiment (positive/neutral/negative/frustrated)
 - `gold.support_case_summary` -- per-case LLM-generated summary, classified intent, suggested resolution
 
+## Troubleshooting
+
+### `DELTA_FEATURES_REQUIRE_MANUAL_ENABLEMENT: timestampNtz`
+
+Lakehouse Sync writes Postgres `TIMESTAMP WITHOUT TIME ZONE` columns as Delta `TIMESTAMP_NTZ`. When creating materialized views that read from these bronze tables, the pipeline fails with:
+
+```
+[DELTA_FEATURES_REQUIRE_MANUAL_ENABLEMENT] Your table schema requires manually enablement
+of the following table feature(s): timestampNtz.
+```
+
+**Fix:** Add `TBLPROPERTIES` to every materialized view definition:
+
+```sql
+CREATE OR REFRESH MATERIALIZED VIEW `caspers-kitchen-prod`.silver.orders
+TBLPROPERTIES ('delta.feature.timestampNtz' = 'supported')
+AS
+SELECT ...
+```
+
+This must be on **every** MV that reads from a bronze table with timestamp columns (which is all of them — every table has `created_at`/`updated_at`). The property must also be on gold MVs that propagate these columns.
+
+### Catalog name contains hyphens
+
+The catalog `caspers-kitchen-prod` contains hyphens, which are not valid in bare SQL identifiers. Always backtick-quote it in SQL:
+
+```sql
+-- Correct
+FROM `caspers-kitchen-prod`.lakebase.lb_orders_history
+
+-- Wrong — will fail with parse error
+FROM caspers-kitchen-prod.lakebase.lb_orders_history
+```
+
+### `databricks bundle init` scaffold cleanup
+
+The `lakeflow-pipelines` template generates sample files and directories that must be removed:
+
+- `src/<project_name>_etl/transformations/sample_*.sql` — sample datasets
+- `src/<project_name>_etl/explorations/sample_exploration.ipynb` — sample notebook
+- `resources/caspers_kitchen_analytics_etl.pipeline.yml` — sample pipeline config
+- `resources/sample_job.job.yml` — sample job config
+
+Replace with your own pipeline/job YAML and `src/silver/` + `src/gold/` directories.
+
+### Pipeline libraries glob must match actual file locations
+
+The pipeline YAML `libraries` glob must point to where your SQL files actually live. If you reorganize `src/`, update the glob:
+
+```yaml
+libraries:
+  - glob:
+      include: ../src/silver/**
+  - glob:
+      include: ../src/gold/**
+```
+
+The default scaffold uses `../src/<project>_etl/transformations/**` which won't find files under `src/silver/` or `src/gold/`.
+
+### CLI positional arguments for Unity Catalog
+
+Unity Catalog commands use **positional arguments**, not flags:
+
+```bash
+# Correct
+databricks tables list caspers-kitchen-prod silver --profile DEFAULT
+databricks tables get caspers-kitchen-prod.silver.orders --profile DEFAULT
+
+# Wrong — these flags don't exist
+databricks tables list --catalog caspers-kitchen-prod --schema silver
+```
+
+### Materialized views are point-in-time snapshots
+
+After a pipeline run, silver/gold tables reflect the state of bronze at refresh time. Bronze continues receiving live CDC data, so querying bronze directly may show more rows than silver. This is expected — the next pipeline refresh picks up new data.
+
 ## Adding New Tables
 
 ### New silver table
