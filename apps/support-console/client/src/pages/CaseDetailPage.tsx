@@ -176,8 +176,8 @@ export function CaseDetailPage() {
       </div>
 
       <div className="grid grid-cols-5 gap-6">
-        {/* Left: messages */}
-        <div className="col-span-3 space-y-6">
+        {/* Left: messages + customer profile */}
+        <div className="col-span-2 space-y-6">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -246,8 +246,8 @@ export function CaseDetailPage() {
           )}
         </div>
 
-        {/* Right: agent response + editor */}
-        <div className="col-span-2 space-y-4">
+        {/* Center: agent response + decision editor */}
+        <div className="col-span-3 space-y-4">
           {agentResponse ? (
             <>
               <Card>
