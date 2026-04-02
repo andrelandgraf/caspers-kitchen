@@ -82,6 +82,13 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
     app.get('/api/cases/:caseId', async (req, res) => {
       try {
         const caseId = req.params.caseId;
+        const caseIdUuid = [
+          caseId.slice(0, 8),
+          caseId.slice(8, 12),
+          caseId.slice(12, 16),
+          caseId.slice(16, 20),
+          caseId.slice(20, 32),
+        ].join('-');
 
         const caseResult = await appkit.lakebase.query(`
           SELECT
@@ -111,14 +118,14 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
 
         const messagesResult = await appkit.lakebase.query(`
           SELECT
-            encode(id, 'hex') AS id,
+            id::text AS id,
             CASE WHEN admin_id IS NOT NULL THEN 'admin' ELSE 'customer' END AS role,
             content,
             created_at
           FROM public.support_messages
-          WHERE encode(case_id, 'hex') = $1
+          WHERE case_id::text = $1
           ORDER BY created_at ASC
-        `, [caseId]);
+        `, [caseIdUuid]);
 
         const agentResult = await appkit.lakebase.query(`
           SELECT
