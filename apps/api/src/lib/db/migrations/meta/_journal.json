@@ -8,6 +8,13 @@
       "when": 1775103498895,
       "tag": "0000_tan_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775148610297,
+      "tag": "0001_nice_stepford_cuckoos",
+      "breakpoints": true
     }
   ]
 }

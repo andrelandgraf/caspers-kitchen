@@ -12,6 +12,7 @@ import * as deliveriesSchema from "@/lib/deliveries/schema";
 import * as supportSchema from "@/lib/support/schema";
 import * as simulationSchema from "@/lib/simulation/schema";
 import * as promotionsSchema from "@/lib/promotions/schema";
+import * as refundsSchema from "@/lib/refunds/schema";
 
 const schema = {
   ...authSchema,
@@ -23,6 +24,7 @@ const schema = {
   ...supportSchema,
   ...simulationSchema,
   ...promotionsSchema,
+  ...refundsSchema,
 };
 
 function createPool(): Pool {
