@@ -37,6 +37,7 @@ export function createApiClient(baseUrl?: string): ApiClient {
   function headers(): Record<string, string> {
     const h: Record<string, string> = {
       "Content-Type": "application/json",
+      Origin: base,
     };
     if (cookies) {
       h["Cookie"] = cookies;
