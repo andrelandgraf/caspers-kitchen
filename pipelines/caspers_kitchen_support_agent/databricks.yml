@@ -1,0 +1,34 @@
+bundle:
+  name: caspers_kitchen_support_agent
+  uuid: 310a42b5-fdec-4848-8b0c-e54eb87ad1c7
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: The Unity Catalog catalog for reading silver/gold and writing output
+  endpoint:
+    description: The AI Gateway model serving endpoint to use
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-df6b51a2-a992.cloud.databricks.com
+    variables:
+      catalog: caspers-kitchen-prod
+      endpoint: databricks-gpt-5-4-mini
+
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-df6b51a2-a992.cloud.databricks.com
+      root_path: /Workspace/Users/andre.landgraf@databricks.com/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: caspers-kitchen-prod
+      endpoint: databricks-gpt-5-4-mini
+    permissions:
+      - user_name: andre.landgraf@databricks.com
+        level: CAN_MANAGE
