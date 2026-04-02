@@ -3,6 +3,7 @@
 A Databricks App powered by [AppKit](https://databricks.github.io/appkit/), featuring React, TypeScript, and Tailwind CSS.
 
 **Enabled plugins:**
+
 - **Analytics** -- SQL query execution against Databricks SQL Warehouses
 - **Lakebase** -- Fully managed Postgres database for transactional (OLTP) workloads on Databricks
 - **Server** -- Express HTTP server with static file serving and Vite dev mode

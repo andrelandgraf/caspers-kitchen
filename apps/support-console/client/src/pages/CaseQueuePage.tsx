@@ -59,9 +59,7 @@ export function CaseQueuePage() {
         </span>
       </div>
 
-      {error && (
-        <div className="text-destructive bg-destructive/10 p-3 rounded-md text-sm">{error}</div>
-      )}
+      {error && <div className="text-destructive bg-destructive/10 p-3 rounded-md text-sm">{error}</div>}
 
       {loading && (
         <div className="space-y-3">
@@ -77,9 +75,7 @@ export function CaseQueuePage() {
 
       {!loading && openCases.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
-            Needs attention
-          </h3>
+          <h3 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">Needs attention</h3>
           {openCases.map((c) => (
             <button
               key={c.case_id}
@@ -100,9 +96,7 @@ export function CaseQueuePage() {
                   <span>{timeAgo(c.case_created_at)}</span>
                 </div>
               </div>
-              {c.suggested_action && (
-                <ActionBadge action={c.suggested_action} amountCents={c.suggested_amount_cents} />
-              )}
+              {c.suggested_action && <ActionBadge action={c.suggested_action} amountCents={c.suggested_amount_cents} />}
             </button>
           ))}
         </section>
@@ -110,9 +104,7 @@ export function CaseQueuePage() {
 
       {!loading && resolvedCases.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
-            Resolved
-          </h3>
+          <h3 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">Resolved</h3>
           {resolvedCases.map((c) => (
             <button
               key={c.case_id}
@@ -131,9 +123,7 @@ export function CaseQueuePage() {
                   <span>{c.message_count} messages</span>
                 </div>
               </div>
-              {c.suggested_action && (
-                <ActionBadge action={c.suggested_action} amountCents={c.suggested_amount_cents} />
-              )}
+              {c.suggested_action && <ActionBadge action={c.suggested_action} amountCents={c.suggested_amount_cents} />}
             </button>
           ))}
         </section>

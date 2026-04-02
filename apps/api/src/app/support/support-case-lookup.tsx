@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,8 +10,11 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 export default function SupportCaseLookup() {
+  const searchParams = useSearchParams();
+  const caseIdParam = searchParams.get("caseId");
+
   const [caseIdInput, setCaseIdInput] = useState("");
-  const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
+  const [activeCaseId, setActiveCaseId] = useState<string | null>(caseIdParam);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,37 +43,38 @@ export default function SupportCaseLookup() {
             Casper&apos;s Kitchen
           </span>
           <span className="text-xs text-muted-foreground uppercase tracking-wider">
-            Support Viewer
+            Support
           </span>
         </div>
       </header>
 
       <main className="flex-1 px-6 py-8">
-        <div className="mx-auto max-w-2xl space-y-8">
-          <h1 className="text-lg font-semibold">View Active Support Case</h1>
-
+        <div className="mx-auto max-w-2xl space-y-6">
           {!activeCaseId ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="case-id">Support Case ID</Label>
-                <Input
-                  id="case-id"
-                  placeholder="Paste a support case ID…"
-                  value={caseIdInput}
-                  onChange={(e) => setCaseIdInput(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <Button type="submit" disabled={!caseIdInput.trim()}>
-                View Case
-              </Button>
-            </form>
+            <>
+              <h1 className="text-lg font-semibold">
+                View Active Support Case
+              </h1>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="case-id">Support Case ID</Label>
+                  <Input
+                    id="case-id"
+                    placeholder="Paste a support case ID…"
+                    value={caseIdInput}
+                    onChange={(e) => setCaseIdInput(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <Button type="submit" disabled={!caseIdInput.trim()}>
+                  View Case
+                </Button>
+              </form>
+            </>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground font-mono">
-                  Case {activeCaseId.slice(0, 8)}&hellip;
-                </p>
+                <h1 className="text-lg font-semibold">Your Support Case</h1>
                 <Button variant="outline" size="sm" onClick={handleReset}>
                   Look up another case
                 </Button>

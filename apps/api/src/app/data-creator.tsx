@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { signUp, signIn } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,10 +16,6 @@ import {
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
-import {
-  SupportCaseViewer,
-  type SupportMessage,
-} from "@/components/support-case-viewer";
 import { ArrowLeft, Check, Loader2, Circle } from "lucide-react";
 import Link from "next/link";
 
@@ -219,12 +216,11 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
   } | null>(null);
 
   // Step 4 state
-  const [supportCase, setSupportCase] = useState<SupportCase | null>(null);
   const [messageText, setMessageText] = useState(
     "My order took forever to be delivered. It's cold and soggy.",
   );
-  const [initialMessages, setInitialMessages] = useState<SupportMessage[]>([]);
-  const [messageSent, setMessageSent] = useState(false);
+
+  const router = useRouter();
 
   // -------------------------------------------------------------------------
   // Step 1: Create User
@@ -397,7 +393,6 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
       });
       if (!caseRes.ok) throw new Error("Failed to create support case");
       const newCase: SupportCase = await caseRes.json();
-      setSupportCase(newCase);
 
       const msgRes = await fetch(`/api/support/${newCase.id}/messages`, {
         method: "POST",
@@ -405,13 +400,10 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
         body: JSON.stringify({ content: messageText }),
       });
       if (!msgRes.ok) throw new Error("Failed to send message");
-      const userMsg: SupportMessage = await msgRes.json();
 
-      setInitialMessages([userMsg]);
-      setMessageSent(true);
+      router.push(`/support?caseId=${newCase.id}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Support ticket failed");
-    } finally {
       setLoading(false);
     }
   }
@@ -593,34 +585,25 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
           {currentStep === 4 && (
             <section className="space-y-4">
               <h2 className="text-lg font-semibold">Support Ticket</h2>
-              {!messageSent || !supportCase ? (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <Label>Subject</Label>
-                    <p className="text-sm">Late delivery</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="support-message">Message</Label>
-                    <Textarea
-                      id="support-message"
-                      value={messageText}
-                      onChange={(e) => setMessageText(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                  <Button onClick={handleSendMessage} disabled={loading}>
-                    {loading && (
-                      <Loader2 className="size-4 animate-spin mr-2" />
-                    )}
-                    Send Message
-                  </Button>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <Label>Subject</Label>
+                  <p className="text-sm">Late delivery</p>
                 </div>
-              ) : (
-                <SupportCaseViewer
-                  caseId={supportCase.id}
-                  initialMessages={initialMessages}
-                />
-              )}
+                <div className="space-y-2">
+                  <Label htmlFor="support-message">Message</Label>
+                  <Textarea
+                    id="support-message"
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <Button onClick={handleSendMessage} disabled={loading}>
+                  {loading && <Loader2 className="size-4 animate-spin mr-2" />}
+                  Send &amp; Open Support Chat
+                </Button>
+              </div>
             </section>
           )}
         </div>

@@ -119,6 +119,20 @@ workspace: Casper's Databricks Workspace {
       font-color: "#0B2026"
     }
 
+    bronze: {
+      label: |md
+        **bronze.\***
+        CDC history tables
+      |
+      shape: page
+      style: {
+        font-size: 15
+        fill: "#EEEDE9"
+        stroke: "#0B2026"
+        font-color: "#0B2026"
+      }
+    }
+
     silver: {
       label: |md
         **silver.\***
@@ -150,7 +164,14 @@ workspace: Casper's Databricks Workspace {
       }
     }
 
-    silver -> gold: daily refresh {
+    bronze -> silver: daily refresh {
+      style: {
+        stroke: "#0B2026"
+        font-color: "#0B2026"
+      }
+    }
+
+    silver -> gold {
       style: {
         stroke: "#0B2026"
         font-color: "#0B2026"
@@ -174,7 +195,7 @@ workspace: Casper's Databricks Workspace {
     }
   }
 
-  core.lakebase -> lakehouse: change data capture {
+  core.lakebase -> lakehouse.bronze: change data capture {
     style: {
       font-size: 14
       stroke: "#EEEDE9"

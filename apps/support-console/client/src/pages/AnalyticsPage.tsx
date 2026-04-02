@@ -39,25 +39,14 @@ export function AnalyticsPage() {
 
       {latest && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard
-            label="Total Cases"
-            value={String(latest.total_cases)}
-            sub={`${latest.open_cases} open`}
-          />
-          <MetricCard
-            label="Avg Response Time"
-            value={`${latest.avg_first_response_minutes ?? '—'}m`}
-          />
+          <MetricCard label="Total Cases" value={String(latest.total_cases)} sub={`${latest.open_cases} open`} />
+          <MetricCard label="Avg Response Time" value={`${latest.avg_first_response_minutes ?? '—'}m`} />
           <MetricCard
             label="Refund Cases"
             value={String(latest.cases_with_refund)}
             sub={`$${((latest.total_refund_cents as number) / 100).toFixed(2)} total`}
           />
-          <MetricCard
-            label="Avg Messages"
-            value={String(latest.avg_messages_per_case)}
-            sub="per case"
-          />
+          <MetricCard label="Avg Messages" value={String(latest.avg_messages_per_case)} sub="per case" />
         </div>
       )}
 

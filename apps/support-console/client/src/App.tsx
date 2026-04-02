@@ -5,9 +5,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-    isActive
-      ? 'bg-foreground/10 text-foreground'
-      : 'text-muted-foreground hover:text-foreground'
+    isActive ? 'bg-foreground/10 text-foreground' : 'text-muted-foreground hover:text-foreground'
   }`;
 
 function Layout() {
@@ -15,9 +13,7 @@ function Layout() {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border/50 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <h1 className="text-base font-semibold tracking-tight text-foreground">
-            Casper's Kitchen
-          </h1>
+          <h1 className="text-base font-semibold tracking-tight text-foreground">Casper's Kitchen</h1>
           <nav className="flex gap-1">
             <NavLink to="/" end className={navLinkClass}>
               Cases
@@ -27,9 +23,7 @@ function Layout() {
             </NavLink>
           </nav>
         </div>
-        <span className="text-xs text-muted-foreground uppercase tracking-widest">
-          Support Console
-        </span>
+        <span className="text-xs text-muted-foreground uppercase tracking-widest">Support Console</span>
       </header>
 
       <main className="flex-1">
