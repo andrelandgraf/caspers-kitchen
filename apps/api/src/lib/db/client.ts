@@ -1,6 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { createLakebasePool } from "@/lib/lakebase";
+import { databaseConfig } from "@/lib/db/config";
+import assert from "@/lib/common/assert";
 import * as authSchema from "@/lib/auth/schema";
 import * as menuSchema from "@/lib/menu/schema";
 import * as cartSchema from "@/lib/cart/schema";
@@ -27,10 +29,8 @@ function createPool(): Pool {
   if (process.env.PGHOST) {
     return createLakebasePool();
   }
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error("Either PGHOST (for Lakebase) or DATABASE_URL must be set");
-  }
+  const url = databaseConfig.server.url;
+  assert(url, "Either PGHOST (for Lakebase) or DATABASE_URL must be set");
   return new Pool({ connectionString: url });
 }
 

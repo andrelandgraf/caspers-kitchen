@@ -5,6 +5,8 @@ import type {
   GeoProfile,
   SafetyCaps,
 } from "./schema";
+import { simulationConfig } from "./env";
+import { authConfig } from "@/lib/auth/config";
 
 export const DEFAULT_BASE_RATES: BaseRates = {
   signupsPerTick: 0.8,
@@ -69,12 +71,12 @@ export const REGIONS = Object.keys(DEFAULT_GEO_PROFILE);
 export const SIM_PASSWORD_PREFIX = "Sim!";
 
 export function getSimPassword(): string {
-  const secret = process.env.CRON_SECRET ?? "dev-fallback-secret";
+  const secret = simulationConfig.server.cronSecret;
   return `${SIM_PASSWORD_PREFIX}${secret.slice(0, 16)}`;
 }
 
 export function getBaseUrl(): string {
-  return process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  return authConfig.server.url;
 }
 
 export const MENU_ITEM_DEFINITIONS = [

@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
+import { simulationConfig } from "./env";
 
 export function verifyCronSecret(request: Request): NextResponse | null {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json(
-      { error: "CRON_SECRET not configured" },
-      { status: 500 },
-    );
-  }
+  const secret = simulationConfig.server.cronSecret;
 
   const auth = request.headers.get("authorization");
   if (auth !== `Bearer ${secret}`) {

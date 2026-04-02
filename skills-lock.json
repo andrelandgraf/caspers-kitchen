@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "6bee044f51bfe9bcc20e2a779ca2a31fae5c6b0095ad30b264ecef9a27cb3ce6"
     },
+    "better-env": {
+      "source": "neondatabase/better-env",
+      "sourceType": "github",
+      "computedHash": "b82c5a3527e61165f06acdad2b71e049b58ecb0e5d0ed1e0026e5e05f8f1d125"
+    },
     "databricks-apps": {
       "source": "databricks/databricks-agent-skills",
       "sourceType": "github",

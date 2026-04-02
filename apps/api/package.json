@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "fmt": "prettier --write .",
     "db:generate": "node scripts/generate-schema.mjs",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "bun scripts/db-migrate.ts",
     "db:studio": "drizzle-kit studio",
     "lakebase:token": "bash scripts/refresh-lakebase-token.sh",
     "db:smoke": "bun scripts/smoke-test-db.ts"
