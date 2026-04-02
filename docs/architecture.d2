@@ -1,0 +1,208 @@
+direction: down
+
+users: {
+  label: Users
+  shape: rectangle
+  style: {
+    font-size: 24
+    border-radius: 12
+    fill: "#0B2026"
+    stroke: "#EEEDE9"
+    font-color: "#F9F7F4"
+  }
+}
+
+api: {
+  label: casperskitchen.com REST API
+  shape: rectangle
+  style: {
+    font-size: 22
+    border-radius: 12
+    fill: "#0B2026"
+    stroke: "#EEEDE9"
+    font-color: "#F9F7F4"
+  }
+}
+
+users -> api: signup, order, support cases {
+  style: {
+    font-size: 16
+    stroke: "#EEEDE9"
+    font-color: "#EEEDE9"
+  }
+}
+
+workspace: Casper's Databricks Workspace {
+  style: {
+    font-size: 28
+    border-radius: 20
+    bold: true
+    fill: "#0B2026"
+    stroke: "#FF3621"
+    font-color: "#F9F7F4"
+  }
+
+  core: {
+    label: ""
+    direction: right
+    style: {
+      stroke: transparent
+      fill: transparent
+    }
+
+    pipeline: {
+      label: |md
+        Pipeline
+        Lakeflow
+      |
+      shape: hexagon
+      style: {
+        font-size: 20
+        fill: "#FF3621"
+        stroke: "#F9F7F4"
+        font-color: "#F9F7F4"
+      }
+    }
+
+    lakebase: {
+      label: Lakebase (Postgres)
+      shape: cylinder
+      style: {
+        font-size: 22
+        fill: "#FF3621"
+        stroke: "#F9F7F4"
+        font-color: "#F9F7F4"
+      }
+    }
+  }
+
+  apps: {
+    label: ""
+    direction: right
+    style: {
+      stroke: transparent
+      fill: transparent
+    }
+
+    gateway: {
+      label: AI Gateway
+      shape: rectangle
+      style: {
+        font-size: 20
+        border-radius: 10
+        fill: "#EEEDE9"
+        stroke: "#EEEDE9"
+        font-color: "#0B2026"
+      }
+    }
+
+    console: {
+      label: Support Console · Databricks App
+      shape: rectangle
+      style: {
+        font-size: 20
+        border-radius: 10
+        fill: "#EEEDE9"
+        stroke: "#EEEDE9"
+        font-color: "#0B2026"
+      }
+    }
+  }
+
+  lakehouse: {
+    label: Lakehouse Storage
+    style: {
+      font-size: 22
+      border-radius: 12
+      fill: "#F9F7F4"
+      stroke: "#F9F7F4"
+      font-color: "#0B2026"
+    }
+
+    silver: {
+      label: |md
+        **silver.\***
+        support_cases · support_messages
+        orders · users
+      |
+      shape: page
+      style: {
+        font-size: 15
+        fill: "#EEEDE9"
+        stroke: "#0B2026"
+        font-color: "#0B2026"
+      }
+    }
+
+    gold: {
+      label: |md
+        **gold.\***
+        support_case_context
+        user_support_profile
+        agent_responses
+      |
+      shape: page
+      style: {
+        font-size: 15
+        fill: "#EEEDE9"
+        stroke: "#FF3621"
+        font-color: "#0B2026"
+      }
+    }
+
+    silver -> gold: daily refresh {
+      style: {
+        stroke: "#0B2026"
+        font-color: "#0B2026"
+      }
+    }
+  }
+
+  core.pipeline -> apps.gateway: LLM calls {
+    style: {
+      font-size: 14
+      stroke: "#EEEDE9"
+      font-color: "#EEEDE9"
+    }
+  }
+
+  core.pipeline -> lakehouse: reads / writes {
+    style: {
+      font-size: 14
+      stroke: "#EEEDE9"
+      font-color: "#EEEDE9"
+    }
+  }
+
+  core.lakebase -> lakehouse: change data capture {
+    style: {
+      font-size: 14
+      stroke: "#EEEDE9"
+      font-color: "#EEEDE9"
+    }
+  }
+
+  lakehouse -> core.lakebase: sync {
+    style: {
+      font-size: 14
+      stroke: "#EEEDE9"
+      font-color: "#EEEDE9"
+    }
+  }
+
+  core.lakebase -> apps.console: reads {
+    style: {
+      font-size: 14
+      stroke: "#EEEDE9"
+      font-color: "#EEEDE9"
+    }
+  }
+}
+
+api -> workspace.core.lakebase: writes {
+  style: {
+    font-size: 16
+    stroke: "#EEEDE9"
+    font-color: "#EEEDE9"
+  }
+}

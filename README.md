@@ -1,36 +1,28 @@
 # Caspers Kitchen
 
-A demo ghost-kitchen food delivery system. Customers sign up, browse a menu, place orders, and get deliveries. A traffic simulation generates realistic activity so the system always has fresh data to demo against.
+A demo ghost-kitchen food delivery system. Customers sign up, browse a menu, place orders, and get deliveries. A traffic simulation generates realistic activity so the system always has fresh data to demo against. An analytics lakehouse, AI support agent, and internal support console close the loop from raw transactions to AI-assisted customer support.
 
 ## Architecture
 
-```
-┌──────────────┐       ┌──────────────────────────┐
-│   Vercel      │       │  Databricks Lakebase     │
-│   (Next.js)   │◄─────►│  (Postgres)              │
-│               │  pg   │                          │
-│  REST API     │       │  Auth, orders, carts,    │
-│  Cron jobs    │       │  deliveries, support,    │
-│               │       │  simulation state        │
-└──────────────┘       └──────────────────────────┘
-       ▲
-       │  HTTPS
-       │
-┌──────┴───────┐
-│  Clients      │
-│  (apps, curl) │
-└──────────────┘
-```
+![Caspers Kitchen Architecture](docs/architecture.png)
 
-**Stack:** Next.js 16 (App Router, API routes only), Drizzle ORM, pg, better-auth, Databricks Lakebase (managed Postgres), Vercel.
+> Diagram source: [`docs/architecture.d2`](docs/architecture.d2) — rendered with [D2](https://d2lang.com) + Playwright for PNG. Re-render: `d2 --theme 200 --pad 80 docs/architecture.d2 docs/architecture.svg && node docs/render-png.js`
 
-## Data flow
+### Data flow
 
-1. **Auth** — Email/password signup and login via `better-auth`. Sessions are stored in the database.
-2. **Ordering** — Authenticated users browse menu items, add to cart, checkout, and cancel. Orders progress through states (confirmed → preparing → ready → picked up → delivered).
-3. **Delivery** — Drivers are assigned to ready orders. Deliveries progress through pickup and dropoff.
-4. **Support** — Users open support cases with messages. Admins reply and resolve.
-5. **Simulation** — A Vercel cron (`/api/cron/simulate`, every 5 min) drives all of the above automatically. It signs up users, places orders, creates support cases, and advances the pipeline — generating realistic traffic without a real frontend.
+1. **Users (simulated)** — A Vercel cron (`/api/cron/simulate`, every 5 min) generates realistic traffic: signing up users, placing orders, opening support cases, and progressing the full order/delivery lifecycle.
+
+2. **REST API → Lakebase** — The Next.js API on Vercel writes all transactional data (users, orders, support cases, messages) into Lakebase (managed Postgres).
+
+3. **Lakebase → Lakehouse (CDC)** — Lakebase automatically publishes change-data-capture history tables into Unity Catalog. No extra config needed.
+
+4. **Pipeline (Lakeflow)** — A daily Lakeflow Declarative Pipeline reads CDC tables and builds **silver** (cleaned) and **gold** (enriched) materialized views: `support_case_context`, `user_support_profile`, `daily_revenue`, etc.
+
+5. **AI Support Agent** — An hourly Lakeflow Job reads silver + gold tables, calls an LLM via AI Gateway, and writes `gold.support_agent_responses` with suggested replies and actions for each open case.
+
+6. **Lakehouse → Lakebase (sync)** — Gold tables (including agent responses) are synced back into Lakebase as `gold.*_sync` tables via Lakehouse Sync.
+
+7. **Support Console** — A Databricks App reads `gold.*_sync` tables and live `support_messages` from Lakebase, showing human agents each case with AI suggestions to review and act on.
 
 ## Key modules
 
