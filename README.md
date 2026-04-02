@@ -16,9 +16,9 @@ A demo ghost-kitchen food delivery system. Customers sign up, browse a menu, pla
 
 3. **Lakebase → Lakehouse (CDC)** — Lakebase automatically publishes change-data-capture history tables into Unity Catalog. No extra config needed.
 
-4. **Pipeline (Lakeflow)** — A daily Lakeflow Declarative Pipeline reads CDC tables and builds **silver** (cleaned) and **gold** (enriched) materialized views: `support_case_context`, `user_support_profile`, `daily_revenue`, etc.
+4. **Pipeline (Lakeflow)** — A Lakeflow Declarative Pipeline (every 1 min) reads CDC tables and builds **silver** (cleaned) and **gold** (enriched) materialized views: `support_case_context`, `user_support_profile`, `daily_revenue`, etc.
 
-5. **AI Support Agent** — An hourly Lakeflow Job reads silver + gold tables, calls an LLM via AI Gateway, and writes `gold.support_agent_responses` with suggested replies and actions for each open case.
+5. **AI Support Agent** — A Lakeflow Job (every 1 min) reads silver + gold tables, calls an LLM via AI Gateway, and writes `gold.support_agent_responses` with suggested replies and actions for each open case.
 
 6. **Lakehouse → Lakebase (sync)** — Gold tables (including agent responses) are synced back into Lakebase as `gold.*_sync` tables via Lakehouse Sync.
 

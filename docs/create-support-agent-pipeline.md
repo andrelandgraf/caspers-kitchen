@@ -37,7 +37,7 @@ pipelines/caspers_kitchen_support_agent/
 ├── databricks.yml                            # Bundle config
 ├── AGENTS.md
 ├── resources/
-│   └── support_agent_job.job.yml             # Hourly trigger
+│   └── support_agent_job.job.yml             # Every-minute cron schedule
 └── src/
     └── generate_responses.py                 # Python notebook
 ```
@@ -110,7 +110,7 @@ databricks experimental aitools tools query \
 
 ## Schedule
 
-Runs every hour via a periodic trigger. Only processes cases with `status IN ('open', 'in_progress')`, so resolved cases are skipped.
+Runs every minute via a cron schedule (`0 * * * * ?`). Only processes cases with `status IN ('open', 'in_progress')`, so resolved cases are skipped.
 
 ## Troubleshooting
 

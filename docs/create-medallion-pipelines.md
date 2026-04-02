@@ -40,7 +40,7 @@ pipelines/caspers_kitchen_analytics/
 ├── AGENTS.md
 ├── resources/
 │   ├── caspers_kitchen_analytics.pipeline.yml     # Pipeline definition (serverless)
-│   └── caspers_kitchen_analytics_job.job.yml      # Daily trigger
+│   └── caspers_kitchen_analytics_job.job.yml      # Every-minute cron schedule
 └── src/
     ├── silver/                                    # CDC dedup → current state
     │   ├── users.sql
