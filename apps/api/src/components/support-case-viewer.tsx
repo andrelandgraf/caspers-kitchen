@@ -15,6 +15,8 @@ import {
   Clock,
   CheckCircle2,
   MessageCircle,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export interface SupportMessage {
@@ -172,9 +174,7 @@ export function SupportCaseViewer({
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageCircle className="size-4 text-muted-foreground" />
         <span className="text-sm font-medium">Support Chat</span>
-        <span className="ml-auto text-xs text-muted-foreground font-mono">
-          #{caseId.slice(0, 8)}
-        </span>
+        <CopyableCaseId caseId={caseId} />
       </div>
 
       {/* Messages area */}
@@ -287,5 +287,31 @@ export function SupportCaseViewer({
         </Button>
       </form>
     </div>
+  );
+}
+
+function CopyableCaseId({ caseId }: { caseId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(caseId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="ml-auto flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground font-mono transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <span>{caseId}</span>
+      {copied ? (
+        <Check className="size-3 text-green-500" />
+      ) : (
+        <Copy className="size-3" />
+      )}
+    </button>
   );
 }
