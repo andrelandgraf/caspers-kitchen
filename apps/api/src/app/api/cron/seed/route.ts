@@ -3,7 +3,10 @@ import { verifyCronSecret } from "@/lib/simulation/cron-auth";
 import { runSeed } from "@/lib/simulation/seed";
 import { runBackfill } from "@/lib/simulation/backfill";
 
-export async function POST(request: Request) {
+export const GET = handler;
+export const POST = handler;
+
+async function handler(request: Request) {
   const authError = verifyCronSecret(request);
   if (authError) return authError;
 

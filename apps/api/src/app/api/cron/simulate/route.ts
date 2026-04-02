@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/simulation/cron-auth";
 import { runTick } from "@/lib/simulation/engine";
 
-export async function POST(request: Request) {
+export const GET = handler;
+export const POST = handler;
+
+async function handler(request: Request) {
   const authError = verifyCronSecret(request);
   if (authError) return authError;
 
