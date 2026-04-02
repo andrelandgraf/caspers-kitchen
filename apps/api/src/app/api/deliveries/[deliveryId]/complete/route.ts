@@ -7,13 +7,15 @@ import { eq } from "drizzle-orm";
 import { getRequiredSession } from "@/lib/auth/session";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ deliveryId: string }> },
 ) {
   const { session: _, error } = await getRequiredSession();
   if (error) return error;
 
   const { deliveryId } = await params;
+
+  const body = await request.json().catch(() => ({}));
 
   const delivery = await db
     .select()
@@ -26,7 +28,7 @@ export async function POST(
     return NextResponse.json({ error: "Delivery not found" }, { status: 404 });
   }
 
-  const now = new Date();
+  const now = body.deliveredAt ? new Date(body.deliveredAt) : new Date();
 
   const [updated] = await db
     .update(deliveries)
