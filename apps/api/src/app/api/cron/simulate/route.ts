@@ -14,12 +14,11 @@ async function handler(request: Request) {
     return NextResponse.json({ success: true, run: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    const code = (err as Record<string, unknown>)?.code;
     const cause =
       err instanceof Error && err.cause instanceof Error
         ? err.cause.message
         : undefined;
-    console.error("[cron/simulate]", message, { code, cause });
-    return NextResponse.json({ error: message, code, cause }, { status: 500 });
+    console.error("[cron/simulate]", message, { cause });
+    return NextResponse.json({ error: message, cause }, { status: 500 });
   }
 }

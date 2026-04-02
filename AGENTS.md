@@ -18,8 +18,11 @@ After every atomic feature change, follow this loop until everything is green:
 1. **Verify and fix** — run `typecheck`, `build`, `fmt` (in `apps/api`). Fix every error before moving on.
 2. **Commit** — one clean commit per atomic change.
 3. **Push** — push to `main`.
-4. **Verify deploy** — use `vercel` CLI or dashboard to confirm the production build succeeds.
-5. **Iterate** — if the deploy fails, find the root cause, fix it, and restart from step 1. Never stop with issues still persisting.
+4. **Verify deploy** — run `vercel ls` (from `apps/api`) and confirm the latest production deployment shows **● Ready**. If it shows **● Error**, run `vercel inspect <url>` to diagnose.
+5. **Verify cron** — run `vercel logs --project caspers-kitchen` and confirm `GET /api/cron/simulate` is returning **200** on its every-5-minute schedule. If it's missing or erroring, investigate immediately.
+6. **Iterate** — if the deploy or cron fails, find the root cause, fix it, and restart from step 1. Never stop with issues still persisting.
+
+Pushing to GitHub is **not** the last step — the task is only done when the production deployment is Ready and the cron job is healthy.
 
 Principles:
 

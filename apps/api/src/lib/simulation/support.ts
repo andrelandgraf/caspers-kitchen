@@ -13,22 +13,26 @@ export async function createSupportCases(
   const caseIds: string[] = [];
 
   for (const user of activeUsers) {
-    if (Math.random() > rate) continue;
+    try {
+      if (Math.random() > rate) continue;
 
-    const subject = pick(SUPPORT_SUBJECTS);
-    const res = await user.client.post("/api/support", { subject });
-    if (!res.ok) continue;
+      const subject = pick(SUPPORT_SUBJECTS);
+      const res = await user.client.post("/api/support", { subject });
+      if (!res.ok) continue;
 
-    const caseData = res.data as { id?: string };
-    if (!caseData.id) continue;
+      const caseData = res.data as { id?: string };
+      if (!caseData.id) continue;
 
-    created++;
-    caseIds.push(caseData.id);
+      created++;
+      caseIds.push(caseData.id);
 
-    const message = pick(SUPPORT_USER_MESSAGES);
-    await user.client.post(`/api/support/${caseData.id}/messages`, {
-      content: message,
-    });
+      const message = pick(SUPPORT_USER_MESSAGES);
+      await user.client.post(`/api/support/${caseData.id}/messages`, {
+        content: message,
+      });
+    } catch (err) {
+      console.error("[sim] createSupportCases threw for", user.email, err);
+    }
   }
 
   return { created, caseIds };
@@ -40,25 +44,29 @@ export async function sendUserFollowUps(
   let sent = 0;
 
   for (const user of activeUsers) {
-    if (Math.random() > 0.4) continue;
+    try {
+      if (Math.random() > 0.4) continue;
 
-    const casesRes = await user.client.get("/api/support");
-    if (!casesRes.ok) continue;
+      const casesRes = await user.client.get("/api/support");
+      if (!casesRes.ok) continue;
 
-    const cases = casesRes.data as Array<{ id: string; status: string }>;
-    const openCases = cases.filter(
-      (c) => c.status === "open" || c.status === "in_progress",
-    );
-
-    for (const supportCase of openCases) {
-      if (Math.random() > 0.5) continue;
-
-      const message = pick(SUPPORT_USER_MESSAGES);
-      const res = await user.client.post(
-        `/api/support/${supportCase.id}/messages`,
-        { content: message },
+      const cases = casesRes.data as Array<{ id: string; status: string }>;
+      const openCases = cases.filter(
+        (c) => c.status === "open" || c.status === "in_progress",
       );
-      if (res.ok) sent++;
+
+      for (const supportCase of openCases) {
+        if (Math.random() > 0.5) continue;
+
+        const message = pick(SUPPORT_USER_MESSAGES);
+        const res = await user.client.post(
+          `/api/support/${supportCase.id}/messages`,
+          { content: message },
+        );
+        if (res.ok) sent++;
+      }
+    } catch (err) {
+      console.error("[sim] sendUserFollowUps threw for", user.email, err);
     }
   }
 

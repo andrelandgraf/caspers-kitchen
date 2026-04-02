@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { simulationConfigs, simulationRuns } from "./schema";
 import type { RunCounters, ComputedMultipliers } from "./schema";
 import { promotions } from "@/lib/promotions/schema";
-import { eq, desc, and, lte, gte, isNull, or } from "drizzle-orm";
+import { eq, desc, and, lte, gte } from "drizzle-orm";
 import {
   computeTickShape,
   getDefaults,
@@ -108,71 +108,105 @@ export async function runTick(): Promise<TickResult> {
     cleanups: 0,
   };
 
-  let error: string | undefined;
+  const errors: string[] = [];
   let multipliers: ComputedMultipliers = {
     diurnal: {},
     weekday: 1,
     promo: {},
     geo: {},
   };
-  try {
-    const promoMultipliers = await getActivePromoMultipliers();
-    const shape = computeTickShape(config, promoMultipliers, now);
-    multipliers = shape.multipliers;
 
-    // Step 1: Sign up new users via API
-    const newUsers = await signUpNewUsers(shape.signups, shape.regionWeights);
-    counters.signups = newUsers.length;
-
-    // Step 2: Sign in returning users via API
-    const returningUsers = await signInReturningUsers(shape.activeUsers);
-    counters.signIns = returningUsers.length;
-
-    const allActiveUsers: SimUser[] = [...newUsers, ...returningUsers];
-
-    // Step 3: Add items to carts via API
-    counters.cartAdds = await addItemsToCarts(allActiveUsers, shape.cartAdds);
-
-    // Step 4: Checkout carts via API
-    const { checked } = await checkoutCarts(allActiveUsers, shape.checkouts);
-    counters.checkouts = checked;
-
-    // Step 5: Cancel some orders via API
-    counters.cancellations = await cancelSomeOrders(
-      allActiveUsers,
-      shape.cancellationRate,
-    );
-
-    // Step 6: Progress order states (direct DB)
-    counters.ordersProgressed = await progressOrderStates();
-
-    // Step 7: Assign drivers (direct DB)
-    counters.driversAssigned = await assignDrivers();
-
-    // Step 8: Progress deliveries (direct DB)
-    counters.deliveriesProgressed = await progressDeliveries();
-
-    // Step 9: Create support cases via API
-    const { created: casesCreated } = await createSupportCases(
-      allActiveUsers,
-      shape.supportCaseRate,
-    );
-    counters.supportCases = casesCreated;
-
-    // Step 10: User follow-up messages via API
-    counters.supportMessages = await sendUserFollowUps(allActiveUsers);
-
-    // Step 11: Admin replies and resolution (direct DB)
-    counters.adminReplies = await adminRepliesAndResolution();
-
-    // Step 12: Cleanup (direct DB)
-    counters.cleanups = await cleanupAndAutoClose();
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+  async function step<T>(
+    name: string,
+    fn: () => Promise<T>,
+  ): Promise<T | undefined> {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sim] step "${name}" failed:`, msg);
+      errors.push(`${name}: ${msg}`);
+      return undefined;
+    }
   }
 
+  const promoMultipliers = await step("loadPromos", () =>
+    getActivePromoMultipliers(),
+  );
+  const shape = promoMultipliers
+    ? computeTickShape(config, promoMultipliers, now)
+    : computeTickShape(config, {}, now);
+  multipliers = shape.multipliers;
+
+  const newUsers = await step("signUpNewUsers", () =>
+    signUpNewUsers(shape.signups, shape.regionWeights),
+  );
+  counters.signups = newUsers?.length ?? 0;
+
+  const returningUsers = await step("signInReturningUsers", () =>
+    signInReturningUsers(shape.activeUsers),
+  );
+  counters.signIns = returningUsers?.length ?? 0;
+
+  const allActiveUsers: SimUser[] = [
+    ...(newUsers ?? []),
+    ...(returningUsers ?? []),
+  ];
+
+  const cartAdds = await step("addItemsToCarts", () =>
+    addItemsToCarts(allActiveUsers, shape.cartAdds),
+  );
+  counters.cartAdds = cartAdds ?? 0;
+
+  const checkout = await step("checkoutCarts", () =>
+    checkoutCarts(allActiveUsers, shape.checkouts),
+  );
+  counters.checkouts = checkout?.checked ?? 0;
+
+  const cancellations = await step("cancelSomeOrders", () =>
+    cancelSomeOrders(allActiveUsers, shape.cancellationRate),
+  );
+  counters.cancellations = cancellations ?? 0;
+
+  const ordersProgressed = await step(
+    "progressOrderStates",
+    progressOrderStates,
+  );
+  counters.ordersProgressed = ordersProgressed ?? 0;
+
+  const driversAssigned = await step("assignDrivers", assignDrivers);
+  counters.driversAssigned = driversAssigned ?? 0;
+
+  const deliveriesProgressed = await step(
+    "progressDeliveries",
+    progressDeliveries,
+  );
+  counters.deliveriesProgressed = deliveriesProgressed ?? 0;
+
+  const casesCreated = await step("createSupportCases", () =>
+    createSupportCases(allActiveUsers, shape.supportCaseRate),
+  );
+  counters.supportCases = casesCreated?.created ?? 0;
+
+  const supportMessages = await step("sendUserFollowUps", () =>
+    sendUserFollowUps(allActiveUsers),
+  );
+  counters.supportMessages = supportMessages ?? 0;
+
+  const adminReplies = await step(
+    "adminRepliesAndResolution",
+    adminRepliesAndResolution,
+  );
+  counters.adminReplies = adminReplies ?? 0;
+
+  const cleanups = await step("cleanupAndAutoClose", cleanupAndAutoClose);
+  counters.cleanups = cleanups ?? 0;
+
+  const error = errors.length > 0 ? errors.join("; ") : undefined;
+
   const finishedAt = new Date();
-  const status = error ? "failed" : "completed";
+  const status: "completed" | "failed" =
+    errors.length > 0 && errors.length >= 12 ? "failed" : "completed";
 
   await db
     .update(simulationRuns)

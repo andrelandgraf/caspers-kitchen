@@ -23,10 +23,8 @@ import { Check, Loader2, Circle } from "lucide-react";
 
 type Step = 1 | 2 | 3 | 4;
 
-interface GeneratedUser {
-  name: string;
-  email: string;
-  password: string;
+interface DataCreatorProps {
+  simPassword: string;
 }
 
 interface MenuItem {
@@ -119,14 +117,13 @@ function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 5);
 }
 
-function generateUser(): GeneratedUser {
-  const first = randomPick(FIRST_NAMES);
-  const last = randomPick(LAST_NAMES);
-  return {
-    name: `${first} ${last}`,
-    email: `${first.toLowerCase()}.${last.toLowerCase()}.${randomSuffix()}@sim.caspers.kitchen`,
-    password: `sim-${randomSuffix()}-${randomSuffix()}`,
-  };
+function deriveEmail(name: string, suffix: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = (parts[0] ?? "user").toLowerCase();
+  const last = (
+    parts.length > 1 ? parts[parts.length - 1] : "unknown"
+  ).toLowerCase();
+  return `${first}.${last}.${suffix}@sim.caspers.kitchen`;
 }
 
 function formatCents(cents: number): string {
@@ -197,15 +194,14 @@ function StepIndicator({ current }: { current: Step }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function DataCreator() {
+export default function DataCreator({ simPassword }: DataCreatorProps) {
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
 
   // Step 1 state
-  const [generatedUser, setGeneratedUser] = useState<GeneratedUser | null>(
-    null,
-  );
+  const [userGenerated, setUserGenerated] = useState(false);
   const [userName, setUserName] = useState("");
+  const [emailSuffix, setEmailSuffix] = useState("");
   const [confirmedUser, setConfirmedUser] = useState<{
     name: string;
     email: string;
@@ -246,31 +242,34 @@ export default function DataCreator() {
   // Step 1: Create User
   // -------------------------------------------------------------------------
 
+  const userEmail = emailSuffix ? deriveEmail(userName, emailSuffix) : "";
+
   function handleGenerateUser() {
-    const user = generateUser();
-    setGeneratedUser(user);
-    setUserName(user.name);
+    const first = randomPick(FIRST_NAMES);
+    const last = randomPick(LAST_NAMES);
+    setUserName(`${first} ${last}`);
+    setEmailSuffix(randomSuffix());
+    setUserGenerated(true);
   }
 
   async function handleConfirmUser() {
-    if (!generatedUser) return;
+    if (!userGenerated || !userEmail) return;
     setLoading(true);
     try {
-      const finalUser = { ...generatedUser, name: userName };
       const { error: signUpErr } = await signUp.email({
-        name: finalUser.name,
-        email: finalUser.email,
-        password: finalUser.password,
+        name: userName,
+        email: userEmail,
+        password: simPassword,
       });
       if (signUpErr) throw new Error(signUpErr.message ?? "Sign up failed");
 
       const { error: signInErr } = await signIn.email({
-        email: finalUser.email,
-        password: finalUser.password,
+        email: userEmail,
+        password: simPassword,
       });
       if (signInErr) throw new Error(signInErr.message ?? "Sign in failed");
 
-      setConfirmedUser({ name: finalUser.name, email: finalUser.email });
+      setConfirmedUser({ name: userName, email: userEmail });
       setCurrentStep(2);
     } catch (err) {
       alert(err instanceof Error ? err.message : "User creation failed");
@@ -479,7 +478,7 @@ export default function DataCreator() {
             currentStep === 1 && (
               <section className="space-y-4">
                 <h2 className="text-lg font-semibold">Create User</h2>
-                {!generatedUser ? (
+                {!userGenerated ? (
                   <Button onClick={handleGenerateUser}>Generate User</Button>
                 ) : (
                   <div className="space-y-4">
@@ -494,13 +493,13 @@ export default function DataCreator() {
                     <div className="space-y-1">
                       <Label>Email</Label>
                       <p className="text-sm text-muted-foreground">
-                        {generatedUser.email}
+                        {userEmail}
                       </p>
                     </div>
                     <div className="space-y-1">
                       <Label>Password</Label>
                       <p className="text-sm text-muted-foreground font-mono">
-                        {generatedUser.password}
+                        {simPassword}
                       </p>
                     </div>
                     <Button onClick={handleConfirmUser} disabled={loading}>

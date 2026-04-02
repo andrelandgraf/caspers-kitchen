@@ -30,11 +30,19 @@ export async function progressOrderStates(): Promise<number> {
     );
 
   for (const order of pendingOrders) {
-    await db
-      .update(orders)
-      .set({ status: "preparing", updatedAt: now })
-      .where(eq(orders.id, order.id));
-    progressed++;
+    try {
+      await db
+        .update(orders)
+        .set({ status: "preparing", updatedAt: now })
+        .where(eq(orders.id, order.id));
+      progressed++;
+    } catch (err) {
+      console.error(
+        "[sim] progressOrder pending→preparing threw for",
+        order.id,
+        err,
+      );
+    }
   }
 
   const preparingOrders = await db
@@ -48,11 +56,19 @@ export async function progressOrderStates(): Promise<number> {
     );
 
   for (const order of preparingOrders) {
-    await db
-      .update(orders)
-      .set({ status: "ready", updatedAt: now })
-      .where(eq(orders.id, order.id));
-    progressed++;
+    try {
+      await db
+        .update(orders)
+        .set({ status: "ready", updatedAt: now })
+        .where(eq(orders.id, order.id));
+      progressed++;
+    } catch (err) {
+      console.error(
+        "[sim] progressOrder preparing→ready threw for",
+        order.id,
+        err,
+      );
+    }
   }
 
   return progressed;
@@ -79,23 +95,27 @@ export async function assignDrivers(): Promise<number> {
 
     const driver = driverPool.shift()!;
 
-    await db.insert(deliveries).values({
-      orderId: order.id,
-      driverId: driver.id,
-      startedAt: now,
-    });
+    try {
+      await db.insert(deliveries).values({
+        orderId: order.id,
+        driverId: driver.id,
+        startedAt: now,
+      });
 
-    await db
-      .update(orders)
-      .set({ status: "out_for_delivery", updatedAt: now })
-      .where(eq(orders.id, order.id));
+      await db
+        .update(orders)
+        .set({ status: "out_for_delivery", updatedAt: now })
+        .where(eq(orders.id, order.id));
 
-    await db
-      .update(drivers)
-      .set({ status: "on_delivery", updatedAt: now })
-      .where(eq(drivers.id, driver.id));
+      await db
+        .update(drivers)
+        .set({ status: "on_delivery", updatedAt: now })
+        .where(eq(drivers.id, driver.id));
 
-    assigned++;
+      assigned++;
+    } catch (err) {
+      console.error("[sim] assignDriver threw for order", order.id, err);
+    }
   }
 
   return assigned;
@@ -116,11 +136,19 @@ export async function progressDeliveries(): Promise<number> {
     );
 
   for (const delivery of assignedDeliveries) {
-    await db
-      .update(deliveries)
-      .set({ status: "picked_up", updatedAt: now })
-      .where(eq(deliveries.id, delivery.id));
-    progressed++;
+    try {
+      await db
+        .update(deliveries)
+        .set({ status: "picked_up", updatedAt: now })
+        .where(eq(deliveries.id, delivery.id));
+      progressed++;
+    } catch (err) {
+      console.error(
+        "[sim] progressDelivery assigned→picked_up threw for",
+        delivery.id,
+        err,
+      );
+    }
   }
 
   const pickedUpDeliveries = await db
@@ -134,11 +162,19 @@ export async function progressDeliveries(): Promise<number> {
     );
 
   for (const delivery of pickedUpDeliveries) {
-    await db
-      .update(deliveries)
-      .set({ status: "in_transit", updatedAt: now })
-      .where(eq(deliveries.id, delivery.id));
-    progressed++;
+    try {
+      await db
+        .update(deliveries)
+        .set({ status: "in_transit", updatedAt: now })
+        .where(eq(deliveries.id, delivery.id));
+      progressed++;
+    } catch (err) {
+      console.error(
+        "[sim] progressDelivery picked_up→in_transit threw for",
+        delivery.id,
+        err,
+      );
+    }
   }
 
   const inTransitDeliveries = await db
@@ -155,22 +191,30 @@ export async function progressDeliveries(): Promise<number> {
     );
 
   for (const delivery of inTransitDeliveries) {
-    await db
-      .update(deliveries)
-      .set({ status: "delivered", deliveredAt: now, updatedAt: now })
-      .where(eq(deliveries.id, delivery.id));
+    try {
+      await db
+        .update(deliveries)
+        .set({ status: "delivered", deliveredAt: now, updatedAt: now })
+        .where(eq(deliveries.id, delivery.id));
 
-    await db
-      .update(orders)
-      .set({ status: "delivered", updatedAt: now })
-      .where(eq(orders.id, delivery.orderId));
+      await db
+        .update(orders)
+        .set({ status: "delivered", updatedAt: now })
+        .where(eq(orders.id, delivery.orderId));
 
-    await db
-      .update(drivers)
-      .set({ status: "available", updatedAt: now })
-      .where(eq(drivers.id, delivery.driverId));
+      await db
+        .update(drivers)
+        .set({ status: "available", updatedAt: now })
+        .where(eq(drivers.id, delivery.driverId));
 
-    progressed++;
+      progressed++;
+    } catch (err) {
+      console.error(
+        "[sim] progressDelivery in_transit→delivered threw for",
+        delivery.id,
+        err,
+      );
+    }
   }
 
   return progressed;
@@ -189,36 +233,40 @@ export async function adminRepliesAndResolution(): Promise<number> {
     .where(sql`${supportCases.status} IN ('open', 'in_progress')`);
 
   for (const supportCase of openCases) {
-    if (Math.random() > 0.5) continue;
+    try {
+      if (Math.random() > 0.5) continue;
 
-    const admin = pick(adminList);
-    const reply = pick(SUPPORT_ADMIN_REPLIES);
+      const admin = pick(adminList);
+      const reply = pick(SUPPORT_ADMIN_REPLIES);
 
-    await db.insert(supportMessages).values({
-      caseId: supportCase.id,
-      adminId: admin.id,
-      content: reply,
-    });
+      await db.insert(supportMessages).values({
+        caseId: supportCase.id,
+        adminId: admin.id,
+        content: reply,
+      });
 
-    if (supportCase.status === "open") {
-      await db
-        .update(supportCases)
-        .set({ status: "in_progress", updatedAt: now })
-        .where(eq(supportCases.id, supportCase.id));
-    }
+      if (supportCase.status === "open") {
+        await db
+          .update(supportCases)
+          .set({ status: "in_progress", updatedAt: now })
+          .where(eq(supportCases.id, supportCase.id));
+      }
 
-    actions++;
+      actions++;
 
-    const caseMessages = await db
-      .select()
-      .from(supportMessages)
-      .where(eq(supportMessages.caseId, supportCase.id));
+      const caseMessages = await db
+        .select()
+        .from(supportMessages)
+        .where(eq(supportMessages.caseId, supportCase.id));
 
-    if (caseMessages.length >= 3 && Math.random() < 0.3) {
-      await db
-        .update(supportCases)
-        .set({ status: "resolved", updatedAt: now })
-        .where(eq(supportCases.id, supportCase.id));
+      if (caseMessages.length >= 3 && Math.random() < 0.3) {
+        await db
+          .update(supportCases)
+          .set({ status: "resolved", updatedAt: now })
+          .where(eq(supportCases.id, supportCase.id));
+      }
+    } catch (err) {
+      console.error("[sim] adminReply threw for case", supportCase.id, err);
     }
   }
 
@@ -237,9 +285,13 @@ export async function cleanupAndAutoClose(): Promise<number> {
     .where(lt(carts.updatedAt, twoHoursAgo));
 
   for (const cart of staleCarts) {
-    await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
-    await db.delete(carts).where(eq(carts.id, cart.id));
-    cleaned++;
+    try {
+      await db.delete(cartItems).where(eq(cartItems.cartId, cart.id));
+      await db.delete(carts).where(eq(carts.id, cart.id));
+      cleaned++;
+    } catch (err) {
+      console.error("[sim] cleanup cart threw for", cart.id, err);
+    }
   }
 
   const resolvedCases = await db
@@ -253,11 +305,15 @@ export async function cleanupAndAutoClose(): Promise<number> {
     );
 
   for (const supportCase of resolvedCases) {
-    await db
-      .update(supportCases)
-      .set({ status: "closed", updatedAt: now })
-      .where(eq(supportCases.id, supportCase.id));
-    cleaned++;
+    try {
+      await db
+        .update(supportCases)
+        .set({ status: "closed", updatedAt: now })
+        .where(eq(supportCases.id, supportCase.id));
+      cleaned++;
+    } catch (err) {
+      console.error("[sim] cleanup case threw for", supportCase.id, err);
+    }
   }
 
   return cleaned;

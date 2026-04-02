@@ -1,5 +1,6 @@
 import DataCreator from "./data-creator";
+import { getSimPassword } from "@/lib/simulation/config";
 
 export default function Home() {
-  return <DataCreator />;
+  return <DataCreator simPassword={getSimPassword()} />;
 }

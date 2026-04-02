@@ -24,37 +24,45 @@ export async function signUpNewUsers(
   const password = getSimPassword();
 
   for (let i = 0; i < count_; i++) {
-    const { first, last, full } = randomName();
-    const email = randomEmail(first, last);
-    const region = pickRegion(regionWeights);
-    const timezone =
-      DEFAULT_GEO_PROFILE[region]?.timezone ?? "America/New_York";
+    try {
+      const { first, last, full } = randomName();
+      const email = randomEmail(first, last);
+      const region = pickRegion(regionWeights);
+      const timezone =
+        DEFAULT_GEO_PROFILE[region]?.timezone ?? "America/New_York";
 
-    const client = createApiClient();
-    const res = await client.signUp({ name: full, email, password });
+      const client = createApiClient();
+      const res = await client.signUp({ name: full, email, password });
 
-    if (!res.ok) {
-      console.error("[sim] signup failed for", email, JSON.stringify(res.data));
-      continue;
+      if (!res.ok) {
+        console.error(
+          "[sim] signup failed for",
+          email,
+          JSON.stringify(res.data),
+        );
+        continue;
+      }
+
+      const userData = res.data as { user?: { id: string } };
+      const userId = userData.user?.id;
+      if (!userId) continue;
+
+      await db
+        .update(users)
+        .set({ timeZone: timezone, region })
+        .where(eq(users.id, userId));
+
+      results.push({
+        id: userId,
+        email,
+        name: full,
+        region,
+        timeZone: timezone,
+        client,
+      });
+    } catch (err) {
+      console.error("[sim] signup threw for user", i, err);
     }
-
-    const userData = res.data as { user?: { id: string } };
-    const userId = userData.user?.id;
-    if (!userId) continue;
-
-    await db
-      .update(users)
-      .set({ timeZone: timezone, region })
-      .where(eq(users.id, userId));
-
-    results.push({
-      id: userId,
-      email,
-      name: full,
-      region,
-      timeZone: timezone,
-      client,
-    });
   }
 
   return results;
@@ -131,18 +139,22 @@ export async function signInReturningUsers(count_: number): Promise<SimUser[]> {
   const results: SimUser[] = [];
 
   for (const user of selected) {
-    const client = createApiClient();
-    const res = await client.signIn({ email: user.email, password });
-    if (!res.ok) continue;
+    try {
+      const client = createApiClient();
+      const res = await client.signIn({ email: user.email, password });
+      if (!res.ok) continue;
 
-    results.push({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      region: user.region,
-      timeZone: user.timeZone,
-      client,
-    });
+      results.push({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        region: user.region,
+        timeZone: user.timeZone,
+        client,
+      });
+    } catch (err) {
+      console.error("[sim] signIn threw for", user.email, err);
+    }
   }
 
   return results;
