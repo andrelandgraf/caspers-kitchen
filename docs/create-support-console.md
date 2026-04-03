@@ -50,7 +50,7 @@ Synced table creation for Autoscaling projects requires the Databricks UI (CLI n
 
 | Source Table | Synced Table (UC) | Postgres Name | Primary Key | Sync Mode |
 |---|---|---|---|---|
-| `gold.support_agent_responses` | `gold.support_agent_responses_sync` | `gold.support_agent_responses_sync` | `case_id` | CONTINUOUS |
+| `gold.support_agent_responses` | `gold.support_agent_responses_sync` | `gold.support_agent_responses_sync` | `message_id` | CONTINUOUS |
 | `gold.support_case_context` | `gold.support_case_context_sync` | `gold.support_case_context_sync` | `case_id` | SNAPSHOT |
 | `gold.user_support_profile` | `gold.user_support_profile_sync` | `gold.user_support_profile_sync` | `user_id` | SNAPSHOT |
 | `gold.support_overview` | `gold.support_overview_sync` | `gold.support_overview_sync` | `case_date` | SNAPSHOT |

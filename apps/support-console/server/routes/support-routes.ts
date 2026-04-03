@@ -76,8 +76,12 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             ar.suggested_amount_cents,
             ar.case_summary
           FROM gold.support_case_context_sync sc
-          LEFT JOIN gold.support_agent_responses_sync ar
-            ON sc.case_id = ar.case_id
+          LEFT JOIN LATERAL (
+            SELECT suggested_action, suggested_amount_cents, case_summary
+            FROM gold.support_agent_responses_sync
+            WHERE case_id = sc.case_id
+            ORDER BY generated_at DESC LIMIT 1
+          ) ar ON true
           ORDER BY sc.case_created_at DESC
         `);
         res.json(result.rows);
@@ -144,6 +148,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
         const agentResult = await appkit.lakebase.query(
           `
           SELECT
+            encode(message_id, 'hex') AS message_id,
             case_summary,
             suggested_response,
             suggested_action,
@@ -153,6 +158,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             generated_at
           FROM gold.support_agent_responses_sync
           WHERE encode(case_id, 'hex') = $1
+          ORDER BY generated_at DESC
         `,
           [caseId]
         );
@@ -177,7 +183,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
         res.json({
           case: caseResult.rows[0],
           messages: messagesResult.rows,
-          agentResponse: agentResult.rows[0] || null,
+          agentResponses: agentResult.rows,
           userProfile: profileResult.rows[0] || null,
         });
       } catch (err) {

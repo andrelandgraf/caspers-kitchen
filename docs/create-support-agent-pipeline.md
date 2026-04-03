@@ -18,10 +18,11 @@ SILVER                              GOLD (input)
                      ▼                                       ▼
               ┌──────────────────────────────────────────────────┐
               │  Lakeflow Job: generate_responses.py             │
-              │  For each open/in_progress case:                 │
+              │  For each unanswered user message:               │
               │    1. Build prompt with case + customer context   │
               │    2. Call GPT via AI Gateway                     │
               │    3. Parse structured JSON response              │
+              │    4. Merge into gold table (append-only)         │
               └──────────────────┬───────────────────────────────┘
                                  │
                                  ▼
@@ -44,10 +45,11 @@ pipelines/caspers_kitchen_support_agent/
 
 ## Output Table: `gold.support_agent_responses`
 
-One row per open/in-progress support case. Overwritten on each run.
+One row per user message that triggered a response. Rows are merged (append-only), preserving the full history of agent drafts across pipeline runs.
 
 | Column | Type | Description |
 |---|---|---|
+| `message_id` | BINARY | PK — FK to silver.support_messages |
 | `case_id` | BINARY | FK to silver.support_cases |
 | `user_id` | STRING | FK to silver.users |
 | `case_summary` | STRING | LLM-generated summary of all messages |
@@ -104,13 +106,13 @@ databricks bundle deploy -t prod --profile DEFAULT
 
 ```bash
 databricks experimental aitools tools query \
-  "SELECT suggested_action, suggested_amount_cents, case_summary FROM \`caspers-kitchen-prod\`.gold.support_agent_responses LIMIT 5" \
+  "SELECT HEX(message_id) AS message_id, suggested_action, suggested_amount_cents, case_summary, generated_at FROM \`caspers-kitchen-prod\`.gold.support_agent_responses ORDER BY generated_at DESC LIMIT 5" \
   --profile DEFAULT
 ```
 
 ## Schedule
 
-Runs every minute via a cron schedule (`0 * * * * ?`). Only processes cases with `status IN ('open', 'in_progress')`, so resolved cases are skipped.
+Runs every minute via a cron schedule (`0 * * * * ?`). Only processes the latest unanswered user message per open/in-progress case. Messages that already have an agent response are skipped (merge is idempotent).
 
 ## Troubleshooting
 

@@ -253,6 +253,7 @@ async function fetchAgentDraft(caseId: string): Promise<AgentDraft | null> {
       sql`SELECT suggested_response, suggested_action, suggested_amount_cents
           FROM gold.support_agent_responses_sync
           WHERE encode(case_id, 'hex') = ${caseIdHex}
+          ORDER BY generated_at DESC
           LIMIT 1`,
     );
 

@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 import mlflow.deployments
-from pyspark.sql import functions as F
+from delta.tables import DeltaTable
 from pyspark.sql.types import (
     BinaryType,
     IntegerType,
@@ -54,13 +54,24 @@ Respond with valid JSON only, no markdown formatting:
 
 # COMMAND ----------
 
-open_cases = spark.sql(f"""
-    SELECT sc.id AS case_id, HEX(sc.id) AS case_id_hex, sc.user_id, sc.subject, sc.status
-    FROM `{catalog}`.silver.support_cases sc
-    WHERE sc.status IN ('open', 'in_progress')
+unanswered_messages = spark.sql(f"""
+    WITH ranked AS (
+        SELECT sm.id AS message_id, sm.case_id, HEX(sm.case_id) AS case_id_hex,
+               sc.user_id, sc.subject, sc.status,
+               ROW_NUMBER() OVER (PARTITION BY sm.case_id ORDER BY sm.created_at DESC) AS rn
+        FROM `{catalog}`.silver.support_messages sm
+        JOIN `{catalog}`.silver.support_cases sc ON sm.case_id = sc.id
+        LEFT JOIN `{catalog}`.gold.support_agent_responses ar ON sm.id = ar.message_id
+        WHERE sc.status IN ('open', 'in_progress')
+          AND sm.admin_id IS NULL
+          AND ar.message_id IS NULL
+    )
+    SELECT message_id, case_id, case_id_hex, user_id, subject, status
+    FROM ranked
+    WHERE rn = 1
 """).collect()
 
-print(f"Found {len(open_cases)} open/in-progress cases to process")
+print(f"Found {len(unanswered_messages)} unanswered user messages to process")
 
 # COMMAND ----------
 
@@ -174,15 +185,16 @@ def parse_response(raw_content):
 results = []
 now = datetime.utcnow()
 
-for case in open_cases:
+for msg in unanswered_messages:
     try:
-        prompt = build_prompt(case)
+        prompt = build_prompt(msg)
         raw_content, model_name = call_llm(prompt)
         parsed = parse_response(raw_content)
 
         results.append({
-            "case_id": case["case_id"],
-            "user_id": case["user_id"],
+            "message_id": msg["message_id"],
+            "case_id": msg["case_id"],
+            "user_id": msg["user_id"],
             "case_summary": parsed["case_summary"],
             "suggested_response": parsed["suggested_response"],
             "suggested_action": parsed["suggested_action"],
@@ -191,16 +203,17 @@ for case in open_cases:
             "model": model_name,
             "generated_at": now,
         })
-        print(f"Processed case {case['subject']}: {parsed['suggested_action']}")
+        print(f"Processed case {msg['subject']}: {parsed['suggested_action']}")
     except Exception as e:
-        print(f"Error processing case {case['subject']}: {e}")
+        print(f"Error processing case {msg['subject']}: {e}")
 
-print(f"\nGenerated {len(results)} responses out of {len(open_cases)} cases")
+print(f"\nGenerated {len(results)} responses out of {len(unanswered_messages)} messages")
 
 # COMMAND ----------
 
 if results:
     schema = StructType([
+        StructField("message_id", BinaryType(), False),
         StructField("case_id", BinaryType(), False),
         StructField("user_id", StringType(), False),
         StructField("case_summary", StringType(), False),
@@ -213,11 +226,13 @@ if results:
     ])
 
     df = spark.createDataFrame(results, schema=schema)
+    table_name = f"`{catalog}`.gold.support_agent_responses"
 
-    df.write.mode("overwrite").saveAsTable(
-        f"`{catalog}`.gold.support_agent_responses"
-    )
+    target = DeltaTable.forName(spark, table_name)
+    target.alias("t").merge(
+        df.alias("s"), "t.message_id = s.message_id"
+    ).whenNotMatchedInsertAll().execute()
 
-    print(f"Wrote {df.count()} rows to {catalog}.gold.support_agent_responses")
+    print(f"Merged {df.count()} rows into {catalog}.gold.support_agent_responses")
 else:
-    print("No results to write")
+    print("No new messages to process")

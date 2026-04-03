@@ -16,7 +16,7 @@ import {
 } from '@databricks/appkit-ui/react';
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
-import { ArrowLeft, Send, Check } from 'lucide-react';
+import { ArrowLeft, Send, Check, ChevronDown } from 'lucide-react';
 import { ActionBadge } from '../components/ActionBadge';
 
 interface CaseDetail {
@@ -45,6 +45,7 @@ interface Message {
 }
 
 interface AgentResponse {
+  message_id: string;
   case_summary: string;
   suggested_response: string;
   suggested_action: string;
@@ -68,7 +69,7 @@ interface UserProfile {
 interface CaseDetailResponse {
   case: CaseDetail;
   messages: Message[];
-  agentResponse: AgentResponse | null;
+  agentResponses: AgentResponse[];
   userProfile: UserProfile | null;
 }
 
@@ -80,6 +81,49 @@ const CASE_STATUSES = ['open', 'in_progress', 'resolved', 'closed'] as const;
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function AgentHistory({ responses }: { responses: AgentResponse[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <CardTitle className="text-sm">
+            Past Agent Drafts ({responses.length})
+          </CardTitle>
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="space-y-4">
+          {responses.map((r) => (
+            <div key={r.message_id} className="border border-border/40 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <ActionBadge action={r.suggested_action} amountCents={r.suggested_amount_cents} />
+                <span className="text-xs text-muted-foreground">
+                  {new Date(r.generated_at).toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed">{r.case_summary}</p>
+              <p className="text-xs italic text-muted-foreground leading-relaxed">{r.reasoning}</p>
+            </div>
+          ))}
+        </CardContent>
+      )}
+    </Card>
+  );
 }
 
 export function CaseDetailPage() {
@@ -107,10 +151,11 @@ export function CaseDetailPage() {
       .then((d) => {
         setData(d);
         setCaseStatus(d.case.status);
-        if (d.agentResponse) {
-          setDraftResponse(d.agentResponse.suggested_response);
-          setDraftAction(d.agentResponse.suggested_action);
-          setDraftAmount(String(d.agentResponse.suggested_amount_cents));
+        const latest = d.agentResponses[0];
+        if (latest) {
+          setDraftResponse(latest.suggested_response);
+          setDraftAction(latest.suggested_action);
+          setDraftAmount(String(latest.suggested_amount_cents));
         }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load case'))
@@ -191,7 +236,9 @@ export function CaseDetailPage() {
     );
   }
 
-  const { case: caseData, messages, agentResponse, userProfile } = data;
+  const { case: caseData, messages, agentResponses, userProfile } = data;
+  const latestAgentResponse = agentResponses[0] ?? null;
+  const olderAgentResponses = agentResponses.slice(1);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -244,7 +291,7 @@ export function CaseDetailPage() {
             </CardContent>
           </Card>
 
-          {agentResponse ? (
+          {latestAgentResponse ? (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">{submitted ? 'Decision Submitted' : 'Your Decision'}</CardTitle>
@@ -340,17 +387,17 @@ export function CaseDetailPage() {
             </CardContent>
           </Card>
 
-          {agentResponse && (
+          {latestAgentResponse && (
             <>
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm">AI Summary</CardTitle>
-                    <span className="text-xs text-muted-foreground font-mono">{agentResponse.model}</span>
+                    <span className="text-xs text-muted-foreground font-mono">{latestAgentResponse.model}</span>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm leading-relaxed">{agentResponse.case_summary}</p>
+                  <p className="text-sm leading-relaxed">{latestAgentResponse.case_summary}</p>
                 </CardContent>
               </Card>
 
@@ -359,17 +406,21 @@ export function CaseDetailPage() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm">Agent Recommendation</CardTitle>
                     <ActionBadge
-                      action={agentResponse.suggested_action}
-                      amountCents={agentResponse.suggested_amount_cents}
+                      action={latestAgentResponse.suggested_action}
+                      amountCents={latestAgentResponse.suggested_amount_cents}
                     />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-xs italic text-muted-foreground leading-relaxed">{agentResponse.reasoning}</p>
+                  <p className="text-xs italic text-muted-foreground leading-relaxed">
+                    {latestAgentResponse.reasoning}
+                  </p>
                 </CardContent>
               </Card>
             </>
           )}
+
+          {olderAgentResponses.length > 0 && <AgentHistory responses={olderAgentResponses} />}
 
           {userProfile && (
             <Card>
