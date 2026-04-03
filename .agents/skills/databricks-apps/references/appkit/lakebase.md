@@ -134,7 +134,7 @@ export const appRouter = t.router({
 
 ## Schema Initialization
 
-**Always create a custom schema** — the Service Principal has `CONNECT_AND_CREATE` permission but **cannot access the `public` schema**. Initialize tables on server startup:
+**Prefer a custom schema** — the Service Principal has `CONNECT_AND_CREATE` permission and can create new schemas, but **cannot access pre-existing schemas** (including `public`) without explicit SQL GRANTs. If you need to use `public`, grant access to the SP (see Cross-Schema Access below). For new tables, create a custom schema at startup:
 
 ```typescript
 // server/server.ts — run once at startup before handling requests

@@ -124,6 +124,17 @@ When a Databricks App connects to Lakebase with `CAN_CONNECT_AND_CREATE`, the ap
 
 The SP **cannot** access schemas or tables created by other roles (human users, pipelines, etc.) unless explicitly granted. This is the #1 cause of `permission denied for schema X` errors after deployment.
 
+### ⚠️ Resource Removal Revokes All Grants
+
+If the postgres resource is ever **removed** from the app (even temporarily — e.g. via a partial `databricks apps update --json` that omits `resources`, or a bundle deploy that drops the resource), the platform **revokes the SP's Postgres role entirely**. Re-adding the resource creates a fresh role, but **all manually-applied SQL GRANTs are lost** and must be re-applied.
+
+This means:
+- `databricks apps update --json` with incomplete payloads can silently wipe the postgres resource (it does full replacement, not merge)
+- A `databricks.yml` change that temporarily removes a resource and redeploys will revoke grants
+- Schema-level grants (`GRANT USAGE ON SCHEMA ...`) are **not** managed by the platform — they are SQL-level and must be restored manually after any role recreation
+
+**Always include ALL resources when using `databricks apps update --json`.** Prefer `databricks.yml` + `bundle deploy` to manage resources declaratively.
+
 ### Discovering the SP Role Name
 
 The SP's Postgres role name is its **client ID** (a UUID). Find it from the app:
@@ -151,7 +162,15 @@ Use the returned token as the password for `psql`:
 PGPASSWORD=<token> psql "host=<ENDPOINT_HOST> dbname=<DB_NAME> sslmode=require user=<YOUR_EMAIL>"
 ```
 
-**Step 2 — Grant permissions** (replace `<SP_CLIENT_ID>` with the UUID from step above):
+**Step 2 — Check schema ownership** (different schemas may have different owners):
+
+```sql
+SELECT schema_name, schema_owner FROM information_schema.schemata;
+```
+
+Tables synced by pipelines are typically owned by a `databricks_writer_XXXXX` role, not by a human user. You must run `ALTER DEFAULT PRIVILEGES` for **each distinct owner role** to cover future tables.
+
+**Step 3 — Grant permissions** (replace `<SP_CLIENT_ID>` with the UUID from step above):
 
 ```sql
 -- Read-only access to a schema (e.g. gold, synced from lakehouse)
@@ -177,13 +196,9 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER_ROLE>" IN SCHEMA support_console
   GRANT ALL ON TABLES TO "<SP_CLIENT_ID>";
 ```
 
-`<OWNER_ROLE>` is typically your email (the human user who created the schema). Check ownership with:
+`<OWNER_ROLE>` is typically your email (the human user who created the schema), but for pipeline-synced schemas check the actual owner (e.g. `databricks_writer_XXXXX`). You need `ALTER DEFAULT PRIVILEGES` for each owner role that creates tables in that schema.
 
-```sql
-SELECT schema_name, schema_owner FROM information_schema.schemata;
-```
-
-**Step 3 — `ALTER DEFAULT PRIVILEGES` is essential.** Without it, new tables created by pipelines or migrations (under the owner role) will not be visible to the SP. This prevents the permissions from breaking again when data is re-synced.
+**Step 4 — `ALTER DEFAULT PRIVILEGES` is essential.** Without it, new tables created by pipelines or migrations (under the owner role) will not be visible to the SP. This prevents the permissions from breaking again when data is re-synced.
 
 ### Ownership vs Grants
 
@@ -253,6 +268,8 @@ databricks postgres create-endpoint projects/<PROJECT_ID>/branches/<BRANCH_ID> <
 | `cannot configure default credentials` | Use `--profile` flag or authenticate first |
 | `PERMISSION_DENIED` | Check workspace permissions |
 | `permission denied for schema X` | App SP lacks access to a pre-existing schema. See **App Service Principal Permissions** above |
+| `permission denied for table X` (schema grants exist) | Table-level grants are separate from schema grants. Re-run `GRANT SELECT ON ALL TABLES IN SCHEMA ...` — the table may have been created after the original grant |
 | `must be owner of table X` | Object was created by a different role. `DROP` and let the SP recreate, or `GRANT ALL` to the SP |
+| Grants lost after `apps update` or resource change | Removing/re-adding a postgres resource revokes the SP role and all grants. Re-apply all SQL GRANTs. See **Resource Removal Revokes All Grants** above |
 | Protected branch cannot be deleted | `update-branch` to set `spec.is_protected` to `false` first |
 | Long-running operation timeout | Use `--no-wait` and poll with `get-operation` |

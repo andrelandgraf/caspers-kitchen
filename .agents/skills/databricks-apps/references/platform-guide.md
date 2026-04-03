@@ -119,11 +119,22 @@ databricks bundle run <APP_RESOURCE_NAME> -t <TARGET> --profile <PROFILE>
 
 ### ⚠️ Destructive Updates Warning
 
-`databricks apps update` (and `bundle run`) performs a **full replacement**, not a merge:
-- Adding a new resource can silently **wipe** existing `user_api_scopes`
-- OBO permissions may be stripped on every deployment
+`databricks apps update --json` performs a **full replacement**, not a merge. If you pass a partial JSON payload, any omitted fields are **removed** from the app:
+- Passing only `user_api_scopes` wipes all `resources` (and vice versa)
+- Removing a postgres resource revokes the SP's Postgres role, destroying all SQL GRANTs
+- Re-adding a resource does NOT restore manually-applied grants — they must be re-applied via SQL
 
-**Workaround:** After each deployment, verify OBO scopes are intact.
+**Best practice:** Manage `user_api_scopes` and `resources` together in `databricks.yml` and deploy with `bundle deploy` + `bundle run`. The bundle handles full replacement correctly because it always sends the complete config. Avoid `databricks apps update --json` unless you include ALL fields.
+
+### OBO Scope Changes Require User Re-Authentication
+
+When you add a new `user_api_scopes` entry (e.g. `dashboards.genie`), existing user sessions still hold OAuth tokens issued **before** the scope was added. These tokens will fail with `does not have required scopes`.
+
+Users must **re-authenticate** to get a fresh token with the new scope:
+- Open the app in an incognito/private browser window, OR
+- Clear cookies for `*.databricksapps.com` and reload
+
+This is a one-time action per user after a scope change.
 
 ## Runtime Environment
 
@@ -167,6 +178,8 @@ For long-running agent interactions, use **WebSockets** instead of SSE.
 | `PERMISSION_DENIED` after deploy | SP missing permissions | Grant SP access to all declared resources |
 | App deploys but config doesn't change | Only ran `bundle deploy` | Also run `bundle run <app-name>` |
 | `File is larger than 10485760 bytes` | Bundled dependencies | Use requirements.txt / package.json |
-| OBO scopes missing after deploy | Destructive update wiped them | Re-apply scopes after each deploy |
+| OBO scopes missing after deploy | Destructive `apps update` wiped them | Manage scopes in `databricks.yml` with `bundle deploy` |
+| `does not have required scopes: genie` | User token issued before scope was added | User must re-authenticate (incognito or clear cookies) |
+| `permission denied for schema X` after resource change | Removing/re-adding postgres resource revokes SP grants | Re-apply all SQL GRANTs to the SP |
 | `${var.xxx}` appears literally in env | Variables not resolved in config | Use literal values, not bundle variables |
 | 504 Gateway Timeout | Request exceeded 120s | Use WebSockets for long operations |
