@@ -11,7 +11,7 @@ function formatCents(cents: number): string {
 
 export function ActionBadge({ action, amountCents }: { action: string; amountCents?: number | null }) {
   const style = ACTION_STYLES[action] ?? ACTION_STYLES.no_action;
-  const showAmount = (action === 'refund' || action === 'credit') && amountCents && amountCents > 0;
+  const showAmount = (action === 'refund' || action === 'credit') && typeof amountCents === 'number' && amountCents > 0;
 
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${style}`}>
