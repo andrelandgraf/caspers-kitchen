@@ -6,7 +6,6 @@ import { carts, cartItems } from "@/lib/cart/schema";
 import { supportCases, supportMessages, admins } from "@/lib/support/schema";
 import { refunds, credits } from "@/lib/refunds/schema";
 import { eq, and, lt, desc, sql } from "drizzle-orm";
-import { SUPPORT_ADMIN_REPLIES } from "./config";
 
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -221,10 +220,6 @@ export async function progressDeliveries(): Promise<number> {
   return progressed;
 }
 
-const REFUND_PATTERN = /refund/i;
-const CREDIT_PATTERN = /credit/i;
-const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
-
 type AgentDraft = {
   suggested_response: string;
   suggested_action: "refund" | "credit" | "no_action" | "escalate" | "resolve";
@@ -274,7 +269,7 @@ async function fetchAgentDraft(caseId: string): Promise<AgentDraft | null> {
   } catch {
     if (agentTableAvailable === null) {
       console.warn(
-        "[sim] gold.support_agent_responses_sync not available, using fallback",
+        "[sim] gold.support_agent_responses_sync not available, skipping admin replies",
       );
       agentTableAvailable = false;
     }
@@ -299,7 +294,6 @@ function tweakAmount(amount: number): number {
 export async function adminRepliesAndResolution(): Promise<number> {
   let actions = 0;
   const now = new Date();
-  const threeHoursAgo = new Date(now.getTime() - THREE_HOURS_MS);
 
   const adminList = await db.select().from(admins);
   if (adminList.length === 0) return 0;
@@ -328,35 +322,24 @@ export async function adminRepliesAndResolution(): Promise<number> {
 
       const draft = await fetchAgentDraft(supportCase.id);
 
-      if (!draft && supportCase.createdAt > threeHoursAgo) continue;
+      if (!draft) continue;
 
       const admin = pick(adminList);
       let reply: string;
-      let action: AgentDraft["suggested_action"] = "no_action";
-      let amountCents = 0;
+      let action: AgentDraft["suggested_action"];
+      let amountCents: number;
 
-      if (draft) {
-        const roll = Math.random();
-        if (roll < 0.8) {
-          reply = draft.suggested_response;
-          action = draft.suggested_action;
-          amountCents = draft.suggested_amount_cents;
-        } else if (roll < 0.95) {
-          reply = tweakResponse(draft.suggested_response);
-          action = draft.suggested_action;
-          amountCents = tweakAmount(draft.suggested_amount_cents);
-        } else {
-          reply = pick(SUPPORT_ADMIN_REPLIES);
-          action = "no_action";
-          amountCents = 0;
-        }
+      const roll = Math.random();
+      if (roll < 0.8) {
+        reply = draft.suggested_response;
+        action = draft.suggested_action;
+        amountCents = draft.suggested_amount_cents;
+      } else if (roll < 0.95) {
+        reply = tweakResponse(draft.suggested_response);
+        action = draft.suggested_action;
+        amountCents = tweakAmount(draft.suggested_amount_cents);
       } else {
-        reply = pick(SUPPORT_ADMIN_REPLIES);
-        if (REFUND_PATTERN.test(reply)) {
-          action = "refund";
-        } else if (CREDIT_PATTERN.test(reply)) {
-          action = "credit";
-        }
+        continue;
       }
 
       await db.insert(supportMessages).values({
