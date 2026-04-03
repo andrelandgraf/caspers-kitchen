@@ -61,7 +61,7 @@ export function CaseQueuePage() {
   const resolvedCases = filtered.filter((c) => c.status === 'resolved' || c.status === 'closed');
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+    <div className="w-full max-w-6xl mx-auto px-6 py-8 space-y-8">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-2xl font-bold tracking-tight shrink-0">Cases</h2>
         <Input
