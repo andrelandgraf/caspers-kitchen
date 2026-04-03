@@ -34,14 +34,25 @@ Your job is to analyze a customer support case and generate:
 4. If refund or credit, a suggested amount in cents
 5. Your reasoning for the recommendation
 
-Guidelines:
-- Be empathetic and professional
-- For missing/wrong items: suggest a refund for the affected items
-- For late deliveries: suggest a credit of 10-20% of order total for first-time issues
+The prompt includes the customer's recent orders with totals. Use these to calculate appropriate amounts.
+
+Compensation guidelines:
+- Late delivery (first time): credit of 15-25% of the most recent order total
+- Late delivery (repeat): credit of 30-50% of the most recent order total
+- Missing items: refund of 30-60% of the order total (estimate based on complaint severity)
+- Wrong order received: full refund of the most recent order total
+- Cold food / quality issue: credit of 20-40% of the most recent order total
+- Delivery never arrived: full refund of the most recent order total
 - For repeat complaints (3+ cases in 90 days): consider escalation
-- High-value customers (lifetime spend > $200) should get generous treatment
-- Never suggest refund/credit exceeding the order total
+- High-value customers (lifetime spend > $200): lean toward the generous end of ranges
+- Never suggest refund/credit exceeding the most recent order total
 - If the case is already resolved with a refund/credit, suggest no_action
+- ALWAYS provide a non-zero suggested_amount_cents when recommending refund or credit
+
+General principles:
+- Be empathetic and professional
+- Credits are goodwill gestures, refunds are for clear service failures
+- When in doubt between refund and credit, prefer credit (lower cost to business)
 
 Respond with valid JSON only, no markdown formatting:
 {
@@ -106,6 +117,14 @@ def build_prompt(case_row):
         ORDER BY created_at ASC
     """).collect()
 
+    orders_df = spark.sql(f"""
+        SELECT HEX(id) AS order_id, status, total_in_cents, created_at
+        FROM `{catalog}`.silver.orders
+        WHERE user_id = '{user_id}'
+        ORDER BY created_at DESC
+        LIMIT 5
+    """).collect()
+
     ctx = context_df[0] if context_df else None
     profile = profile_df[0] if profile_df else None
 
@@ -129,6 +148,16 @@ def build_prompt(case_row):
         parts.append(f"  Support cases (90d): {profile['support_cases_90d']}")
         parts.append(f"  Refunds (90d): ${profile['total_refunds_90d_cents'] / 100:.2f}")
         parts.append(f"  Credits (90d): ${profile['total_credits_90d_cents'] / 100:.2f}")
+
+    if orders_df:
+        parts.append(f"\nRecent Orders (newest first):")
+        for order in orders_df:
+            ts = order["created_at"].strftime("%Y-%m-%d %H:%M") if order["created_at"] else ""
+            parts.append(f"  [{ts}] ${order['total_in_cents'] / 100:.2f} — {order['status']}")
+        most_recent = orders_df[0]
+        parts.append(f"  Most recent order total: ${most_recent['total_in_cents'] / 100:.2f}")
+    else:
+        parts.append(f"\nNo recent orders found.")
 
     parts.append(f"\nMessage Thread:")
     for msg in messages_df:
