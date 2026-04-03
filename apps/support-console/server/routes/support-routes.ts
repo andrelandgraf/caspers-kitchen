@@ -62,27 +62,38 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
       try {
         const result = await appkit.lakebase.query(`
           SELECT
-            encode(sc.case_id, 'hex') AS case_id,
+            REPLACE(sc.id::text, '-', '') AS case_id,
             sc.user_id,
-            sc.user_name,
-            sc.user_email,
+            u.name AS user_name,
+            u.email AS user_email,
             sc.subject,
             sc.status,
-            sc.case_created_at,
-            sc.message_count,
-            sc.has_admin_reply,
-            sc.first_response_minutes,
+            sc.created_at AS case_created_at,
+            COALESCE(ms.message_count, 0) AS message_count,
+            COALESCE(ms.has_admin_reply, false) AS has_admin_reply,
+            ms.first_response_minutes,
             ar.suggested_action,
             ar.suggested_amount_cents,
             ar.case_summary
-          FROM gold.support_case_context_sync sc
+          FROM public.support_cases sc
+          JOIN public.users u ON sc.user_id = u.id
+          LEFT JOIN LATERAL (
+            SELECT
+              COUNT(*)::int AS message_count,
+              bool_or(admin_id IS NOT NULL) AS has_admin_reply,
+              (EXTRACT(EPOCH FROM (
+                MIN(created_at) FILTER (WHERE admin_id IS NOT NULL) - MIN(created_at)
+              )) / 60)::int AS first_response_minutes
+            FROM public.support_messages
+            WHERE case_id = sc.id
+          ) ms ON true
           LEFT JOIN LATERAL (
             SELECT suggested_action, suggested_amount_cents, case_summary
             FROM gold.support_agent_responses_sync
-            WHERE case_id = sc.case_id
+            WHERE encode(case_id, 'hex') = REPLACE(sc.id::text, '-', '')
             ORDER BY generated_at DESC LIMIT 1
           ) ar ON true
-          ORDER BY sc.case_created_at DESC
+          ORDER BY sc.created_at DESC
         `);
         res.json(result.rows);
       } catch (err) {
@@ -105,25 +116,53 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
         const caseResult = await appkit.lakebase.query(
           `
           SELECT
-            encode(sc.case_id, 'hex') AS case_id,
+            REPLACE(sc.id::text, '-', '') AS case_id,
             sc.user_id,
-            sc.user_name,
-            sc.user_email,
-            sc.user_region,
+            u.name AS user_name,
+            u.email AS user_email,
+            u.region AS user_region,
             sc.subject,
             sc.status,
-            sc.case_created_at,
-            sc.message_count,
-            sc.has_admin_reply,
-            sc.first_response_minutes,
-            sc.linked_refund_cents,
-            sc.linked_credit_cents,
-            sc.user_lifetime_spend_cents,
-            sc.user_cases_90d
-          FROM gold.support_case_context_sync sc
-          WHERE encode(sc.case_id, 'hex') = $1
+            sc.created_at AS case_created_at,
+            COALESCE(ms.message_count, 0) AS message_count,
+            COALESCE(ms.has_admin_reply, false) AS has_admin_reply,
+            ms.first_response_minutes,
+            COALESCE(cr.linked_refund_cents, 0) AS linked_refund_cents,
+            COALESCE(cc.linked_credit_cents, 0) AS linked_credit_cents,
+            COALESCE(ul.user_lifetime_spend_cents, 0) AS user_lifetime_spend_cents,
+            COALESCE(urc.user_cases_90d, 0) AS user_cases_90d
+          FROM public.support_cases sc
+          JOIN public.users u ON sc.user_id = u.id
+          LEFT JOIN LATERAL (
+            SELECT
+              COUNT(*)::int AS message_count,
+              bool_or(admin_id IS NOT NULL) AS has_admin_reply,
+              (EXTRACT(EPOCH FROM (
+                MIN(created_at) FILTER (WHERE admin_id IS NOT NULL) - MIN(created_at)
+              )) / 60)::int AS first_response_minutes
+            FROM public.support_messages
+            WHERE case_id = sc.id
+          ) ms ON true
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(amount_in_cents), 0)::int AS linked_refund_cents
+            FROM public.refunds WHERE support_case_id = sc.id
+          ) cr ON true
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(amount_in_cents), 0)::int AS linked_credit_cents
+            FROM public.credits WHERE support_case_id = sc.id
+          ) cc ON true
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(total_in_cents), 0)::bigint AS user_lifetime_spend_cents
+            FROM public.orders WHERE user_id = sc.user_id
+          ) ul ON true
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*)::int AS user_cases_90d
+            FROM public.support_cases
+            WHERE user_id = sc.user_id AND created_at >= NOW() - INTERVAL '90 days'
+          ) urc ON true
+          WHERE sc.id = $1::uuid
         `,
-          [caseId]
+          [caseIdUuid]
         );
 
         if (caseResult.rows.length === 0) {
@@ -163,21 +202,22 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           [caseId]
         );
 
+        const userId = caseResult.rows[0].user_id as string;
         const profileResult = await appkit.lakebase.query(
           `
           SELECT
-            total_orders_90d,
-            total_spend_90d_cents,
-            lifetime_order_count,
-            lifetime_spend_cents,
-            support_cases_90d,
-            support_cases_lifetime,
-            total_refunds_90d_cents,
-            total_credits_90d_cents
-          FROM gold.user_support_profile_sync
+            COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '90 days')::int AS total_orders_90d,
+            COALESCE(SUM(total_in_cents) FILTER (WHERE created_at >= NOW() - INTERVAL '90 days'), 0)::bigint AS total_spend_90d_cents,
+            COUNT(*)::int AS lifetime_order_count,
+            COALESCE(SUM(total_in_cents), 0)::bigint AS lifetime_spend_cents,
+            (SELECT COUNT(*)::int FROM public.support_cases WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '90 days') AS support_cases_90d,
+            (SELECT COUNT(*)::int FROM public.support_cases WHERE user_id = $1) AS support_cases_lifetime,
+            COALESCE((SELECT SUM(amount_in_cents)::bigint FROM public.refunds WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '90 days'), 0) AS total_refunds_90d_cents,
+            COALESCE((SELECT SUM(amount_in_cents)::bigint FROM public.credits WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '90 days'), 0) AS total_credits_90d_cents
+          FROM public.orders
           WHERE user_id = $1
         `,
-          [caseResult.rows[0].user_id as string]
+          [userId]
         );
 
         res.json({
