@@ -11,6 +11,10 @@ This monorepo contains parts of the Caspers Kitchen system (relevant to the demo
 - addiitonal Databricks infra used to sync data to the lake house
 - an internal support agent built on Databricks AgentBricks
 
+# Package Manager
+
+This project uses **npm** (not bun, yarn, or pnpm). Do not generate `bun.lock`, `yarn.lock`, or `pnpm-lock.yaml` files.
+
 # Dev Workflow
 
 After every atomic feature change, follow this loop until everything is green:
