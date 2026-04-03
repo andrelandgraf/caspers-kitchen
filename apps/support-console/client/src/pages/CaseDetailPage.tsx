@@ -16,7 +16,7 @@ import {
 } from '@databricks/appkit-ui/react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router';
-import { ArrowLeft, Send, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Check, ChevronDown, Loader2, Copy } from 'lucide-react';
 import { ActionBadge } from '../components/ActionBadge';
 
 interface CaseDetail {
@@ -114,6 +114,29 @@ function AgentHistory({ responses }: { responses: AgentResponse[] }) {
         </CardContent>
       )}
     </Card>
+  );
+}
+
+function CopyableId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={`Copy full ID: ${id}`}
+      className="inline-flex items-center gap-1.5 font-mono text-xs bg-muted/50 px-2 py-1 rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+    >
+      {id.slice(0, 8)}
+      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+    </button>
   );
 }
 
@@ -251,9 +274,7 @@ export function CaseDetailPage() {
         </Link>
         <Separator orientation="vertical" className="h-4" />
         <h2 className="text-lg font-semibold">{caseData.subject}</h2>
-        <code className="font-mono text-xs bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground">
-          {caseData.case_id.slice(0, 8)}
-        </code>
+        <CopyableId id={caseData.case_id} />
         <Badge variant={caseStatus === 'resolved' || caseStatus === 'closed' ? 'outline' : 'secondary'}>
           {caseStatus}
         </Badge>
