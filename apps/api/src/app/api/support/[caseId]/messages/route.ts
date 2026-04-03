@@ -9,26 +9,10 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ caseId: string }> },
 ) {
-  const { session, error } = await getRequiredSession();
+  const { error } = await getRequiredSession();
   if (error) return error;
 
   const { caseId } = await params;
-
-  const supportCase = await db
-    .select()
-    .from(supportCases)
-    .where(
-      and(
-        eq(supportCases.id, caseId),
-        eq(supportCases.userId, session.user.id),
-      ),
-    )
-    .limit(1)
-    .then((rows) => rows[0]);
-
-  if (!supportCase) {
-    return NextResponse.json({ error: "Case not found" }, { status: 404 });
-  }
 
   const messages = await db
     .select()
