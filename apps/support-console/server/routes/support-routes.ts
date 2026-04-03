@@ -30,7 +30,7 @@ const CREATE_DECISIONS_TABLE_SQL = `
 
 const SubmitDecisionBody = z.object({
   case_id: z.string().min(1),
-  admin_action: z.enum(['refund', 'credit', 'no_action', 'escalate']),
+  admin_action: z.enum(['refund', 'credit', 'no_action', 'escalate', 'resolve']),
   admin_amount_cents: z.number().int().min(0),
   admin_response: z.string().min(1),
 });
@@ -267,12 +267,47 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           );
           message = msgResult.rows[0] ?? null;
 
+          if (parsed.data.admin_action === 'resolve') {
+            await appkit.lakebase.query(
+              `UPDATE public.support_cases SET status = 'resolved', updated_at = NOW() WHERE id = $1::uuid`,
+              [caseIdUuid]
+            );
+          } else {
+            await appkit.lakebase.query(
+              `UPDATE public.support_cases
+               SET status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
+                   updated_at = NOW()
+               WHERE id = $1::uuid`,
+              [caseIdUuid]
+            );
+          }
+        }
+
+        const caseRow = await appkit.lakebase.query(
+          `SELECT user_id FROM public.support_cases WHERE id = $1::uuid`,
+          [caseIdUuid]
+        );
+        const userId = caseRow.rows[0]?.user_id as string | undefined;
+
+        if (userId && parsed.data.admin_action === 'refund' && parsed.data.admin_amount_cents > 0) {
+          const orderRow = await appkit.lakebase.query(
+            `SELECT id::text AS id, total_in_cents FROM public.orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [userId]
+          );
+          const order = orderRow.rows[0];
+          if (order) {
+            const refundAmount = Math.min(parsed.data.admin_amount_cents, order.total_in_cents as number);
+            await appkit.lakebase.query(
+              `INSERT INTO public.refunds (user_id, order_id, support_case_id, amount_in_cents, reason)
+               VALUES ($1, $2::uuid, $3::uuid, $4, $5)`,
+              [userId, order.id, caseIdUuid, refundAmount, parsed.data.admin_response]
+            );
+          }
+        } else if (userId && parsed.data.admin_action === 'credit' && parsed.data.admin_amount_cents > 0) {
           await appkit.lakebase.query(
-            `UPDATE public.support_cases
-             SET status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
-                 updated_at = NOW()
-             WHERE id = $1::uuid`,
-            [caseIdUuid]
+            `INSERT INTO public.credits (user_id, support_case_id, amount_in_cents, reason)
+             VALUES ($1, $2::uuid, $3, $4)`,
+            [userId, caseIdUuid, parsed.data.admin_amount_cents, parsed.data.admin_response]
           );
         }
 

@@ -35,3 +35,8 @@ Principles:
 - **Type narrowing, not type casting** — no `as any`, no `as T`. Use assertion functions, discriminated unions, and control flow narrowing.
 - **Good error messages** — every assert and throw should explain what went wrong and what was expected.
 - **Fail early** — validate inputs and env vars at the boundary, not deep in business logic.
+
+# Databricks Apps (Support Console)
+
+- `databricks bundle deploy` uploads files but does **not** restart the app. To apply changes, run `databricks apps deploy --profile <PROFILE>` from the app directory — this rebuilds and restarts the app.
+- The support console fetches data on page load only (no polling). If data looks stale after a deploy, the app likely needs a restart, not just a browser refresh.

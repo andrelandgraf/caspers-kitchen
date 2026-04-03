@@ -102,6 +102,7 @@ export function CaseQueuePage() {
                   <StatusBadge status={c.status} />
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <code className="font-mono text-[11px] bg-muted/50 px-1.5 py-0.5 rounded">{c.case_id.slice(0, 8)}</code>
                   <span>{c.user_name}</span>
                   <span>&middot;</span>
                   <span>{c.message_count} messages</span>
@@ -131,6 +132,7 @@ export function CaseQueuePage() {
                   <StatusBadge status={c.status} />
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <code className="font-mono text-[11px] bg-muted/50 px-1.5 py-0.5 rounded">{c.case_id.slice(0, 8)}</code>
                   <span>{c.user_name}</span>
                   <span>&middot;</span>
                   <span>{c.message_count} messages</span>

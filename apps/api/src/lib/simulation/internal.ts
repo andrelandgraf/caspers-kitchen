@@ -227,7 +227,7 @@ const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
 type AgentDraft = {
   suggested_response: string;
-  suggested_action: "refund" | "credit" | "no_action" | "escalate";
+  suggested_action: "refund" | "credit" | "no_action" | "escalate" | "resolve";
   suggested_amount_cents: number;
 };
 
@@ -236,6 +236,7 @@ const VALID_AGENT_ACTIONS = new Set([
   "credit",
   "no_action",
   "escalate",
+  "resolve",
 ]);
 
 function isValidAction(val: unknown): val is AgentDraft["suggested_action"] {
@@ -310,18 +311,18 @@ export async function adminRepliesAndResolution(): Promise<number> {
 
   for (const supportCase of openCases) {
     try {
-      const existingAdminMessages = await db
-        .select({ id: supportMessages.id })
+      const lastMessage = await db
+        .select({
+          id: supportMessages.id,
+          adminId: supportMessages.adminId,
+        })
         .from(supportMessages)
-        .where(
-          and(
-            eq(supportMessages.caseId, supportCase.id),
-            sql`${supportMessages.adminId} IS NOT NULL`,
-          ),
-        )
+        .where(eq(supportMessages.caseId, supportCase.id))
+        .orderBy(desc(supportMessages.createdAt))
         .limit(1);
 
-      if (existingAdminMessages.length > 0) continue;
+      const lastIsAdmin = lastMessage[0]?.adminId !== null;
+      if (lastIsAdmin) continue;
 
       if (Math.random() > 0.5) continue;
 
@@ -364,7 +365,12 @@ export async function adminRepliesAndResolution(): Promise<number> {
         content: reply,
       });
 
-      if (supportCase.status === "open") {
+      if (action === "resolve") {
+        await db
+          .update(supportCases)
+          .set({ status: "resolved", updatedAt: now })
+          .where(eq(supportCases.id, supportCase.id));
+      } else if (supportCase.status === "open") {
         await db
           .update(supportCases)
           .set({ status: "in_progress", updatedAt: now })
@@ -406,18 +412,6 @@ export async function adminRepliesAndResolution(): Promise<number> {
       }
 
       actions++;
-
-      const caseMessages = await db
-        .select()
-        .from(supportMessages)
-        .where(eq(supportMessages.caseId, supportCase.id));
-
-      if (caseMessages.length >= 3 && Math.random() < 0.3) {
-        await db
-          .update(supportCases)
-          .set({ status: "resolved", updatedAt: now })
-          .where(eq(supportCases.id, supportCase.id));
-      }
     } catch (err) {
       console.error("[sim] adminReply threw for case", supportCase.id, err);
     }

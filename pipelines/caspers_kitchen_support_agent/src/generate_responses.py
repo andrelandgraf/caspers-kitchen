@@ -30,7 +30,7 @@ SYSTEM_PROMPT = """You are a support agent for Caspers Kitchen, a ghost kitchen 
 Your job is to analyze a customer support case and generate:
 1. A concise summary of the case so far
 2. A suggested response to send to the customer
-3. A recommended action (refund, credit, no_action, or escalate)
+3. A recommended action (refund, credit, no_action, escalate, or resolve)
 4. If refund or credit, a suggested amount in cents
 5. Your reasoning for the recommendation
 
@@ -49,6 +49,10 @@ Compensation guidelines:
 - If the case is already resolved with a refund/credit, suggest no_action
 - ALWAYS provide a non-zero suggested_amount_cents when recommending refund or credit
 
+Case resolution:
+- If the customer's latest message is a positive acknowledgment (e.g. "thank you", "that works", "appreciate it") and the issue has already been addressed with a response, refund, or credit, recommend "resolve" with a brief friendly closing message (e.g. "Glad we could help! Closing this case."). Do not suggest additional compensation.
+- If the customer is still unhappy after an admin response, draft a new response addressing their remaining concerns. Do not recommend resolve.
+
 General principles:
 - Be empathetic and professional
 - Credits are goodwill gestures, refunds are for clear service failures
@@ -58,7 +62,7 @@ Respond with valid JSON only, no markdown formatting:
 {
   "case_summary": "...",
   "suggested_response": "...",
-  "suggested_action": "refund|credit|no_action|escalate",
+  "suggested_action": "refund|credit|no_action|escalate|resolve",
   "suggested_amount_cents": 0,
   "reasoning": "..."
 }"""
@@ -196,7 +200,7 @@ def parse_response(raw_content):
 
     parsed = json.loads(cleaned)
 
-    valid_actions = {"refund", "credit", "no_action", "escalate"}
+    valid_actions = {"refund", "credit", "no_action", "escalate", "resolve"}
     action = parsed.get("suggested_action", "no_action")
     if action not in valid_actions:
         action = "no_action"

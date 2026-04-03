@@ -232,6 +232,24 @@ export const SUPPORT_USER_MESSAGES = [
   "This is the second time this has happened. Very frustrating.",
 ] as const;
 
+export const SUPPORT_POSITIVE_REPLIES = [
+  "Thanks so much, that works for me!",
+  "Appreciate the help! You can close this out.",
+  "Great, thanks for the quick resolution.",
+  "Perfect, thank you for the credit!",
+  "That's fair, thanks for looking into it.",
+  "Awesome, I appreciate you taking care of this.",
+  "Thank you! That makes up for the trouble.",
+  "Sounds good, thanks for the fast response.",
+] as const;
+
+export const SUPPORT_NEGATIVE_REPLIES = [
+  "That's not enough. I want a full refund.",
+  "I'm still not satisfied with this response.",
+  "This keeps happening and nothing changes.",
+  "I don't think a credit covers how bad this was.",
+] as const;
+
 export const SUPPORT_ADMIN_REPLIES = [
   "I'm sorry to hear about your experience. Let me look into this right away.",
   "Thank you for reaching out. I've located your order and I'm checking the status now.",

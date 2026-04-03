@@ -239,6 +239,11 @@ export function CaseDetailPage() {
   const { case: caseData, messages, agentResponses, userProfile } = data;
   const latestAgentResponse = agentResponses[0] ?? null;
   const olderAgentResponses = agentResponses.slice(1);
+  const lastMessage = messages[messages.length - 1];
+  const adminAlreadyReplied = lastMessage?.role === 'admin' && !submitted;
+  const hasLinkedRefund = caseData.linked_refund_cents > 0;
+  const hasLinkedCredit = caseData.linked_credit_cents > 0;
+  const hasLinkedCompensation = hasLinkedRefund || hasLinkedCredit;
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
@@ -291,68 +296,108 @@ export function CaseDetailPage() {
             </CardContent>
           </Card>
 
-          {latestAgentResponse ? (
+          {hasLinkedCompensation && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">{submitted ? 'Decision Submitted' : 'Your Decision'}</CardTitle>
+                <CardTitle className="text-sm">Applied Compensation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  {hasLinkedRefund && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">Refund</Badge>
+                      <span className="text-sm font-mono font-medium">{formatCents(caseData.linked_refund_cents)}</span>
+                    </div>
+                  )}
+                  {hasLinkedCredit && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">Credit</Badge>
+                      <span className="text-sm font-mono font-medium">{formatCents(caseData.linked_credit_cents)}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {submitted ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Decision Submitted</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2 text-sm text-success">
+                  <Check className="h-4 w-4" />
+                  Decision recorded successfully.
+                </div>
+              </CardContent>
+            </Card>
+          ) : adminAlreadyReplied ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Response Sent</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Check className="h-4 w-4" />
+                  An admin response has been sent. Waiting for customer reply.
+                </div>
+              </CardContent>
+            </Card>
+          ) : latestAgentResponse ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Your Decision</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {submitted ? (
-                  <div className="flex items-center gap-2 text-sm text-success">
-                    <Check className="h-4 w-4" />
-                    Decision recorded successfully.
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Action</label>
+                  <Select value={draftAction} onValueChange={setDraftAction}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="refund">Refund</SelectItem>
+                      <SelectItem value="credit">Credit</SelectItem>
+                      <SelectItem value="no_action">No action</SelectItem>
+                      <SelectItem value="escalate">Escalate</SelectItem>
+                      <SelectItem value="resolve">Resolve</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {(draftAction === 'refund' || draftAction === 'credit') && (
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Amount (cents)</label>
+                    <Input
+                      type="number"
+                      value={draftAmount}
+                      onChange={(e) => setDraftAmount(e.target.value)}
+                      min={0}
+                    />
                   </div>
-                ) : (
-                  <>
-                    <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground">Action</label>
-                      <Select value={draftAction} onValueChange={setDraftAction}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="refund">Refund</SelectItem>
-                          <SelectItem value="credit">Credit</SelectItem>
-                          <SelectItem value="no_action">No action</SelectItem>
-                          <SelectItem value="escalate">Escalate</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {(draftAction === 'refund' || draftAction === 'credit') && (
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">Amount (cents)</label>
-                        <Input
-                          type="number"
-                          value={draftAmount}
-                          onChange={(e) => setDraftAmount(e.target.value)}
-                          min={0}
-                        />
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground">Response to customer</label>
-                      <textarea
-                        value={draftResponse}
-                        onChange={(e) => setDraftResponse(e.target.value)}
-                        rows={5}
-                        className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-
-                    <Button onClick={handleSubmit} disabled={submitting || !draftResponse.trim()} className="w-full">
-                      {submitting ? (
-                        'Submitting...'
-                      ) : (
-                        <>
-                          <Send className="h-3.5 w-3.5 mr-1.5" />
-                          Approve & Send
-                        </>
-                      )}
-                    </Button>
-                  </>
                 )}
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Response to customer</label>
+                  <textarea
+                    value={draftResponse}
+                    onChange={(e) => setDraftResponse(e.target.value)}
+                    rows={5}
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+
+                <Button onClick={handleSubmit} disabled={submitting || !draftResponse.trim()} className="w-full">
+                  {submitting ? (
+                    'Submitting...'
+                  ) : (
+                    <>
+                      <Send className="h-3.5 w-3.5 mr-1.5" />
+                      Approve & Send
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -452,6 +497,10 @@ export function CaseDetailPage() {
                   <div>
                     <span className="text-muted-foreground">Refunds (90d)</span>
                     <p className="font-medium font-mono">{formatCents(userProfile.total_refunds_90d_cents)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Credits (90d)</span>
+                    <p className="font-medium font-mono">{formatCents(userProfile.total_credits_90d_cents)}</p>
                   </div>
                 </div>
               </CardContent>
