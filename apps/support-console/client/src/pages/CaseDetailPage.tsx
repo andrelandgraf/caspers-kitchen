@@ -229,7 +229,7 @@ export function CaseDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-4">
+      <div className="w-full max-w-6xl mx-auto px-6 py-8 space-y-4">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-5 gap-6">
           <div className="col-span-3 space-y-3">
@@ -247,7 +247,7 @@ export function CaseDetailPage() {
 
   if (error || !data) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="w-full max-w-6xl mx-auto px-6 py-8">
         <div className="text-destructive bg-destructive/10 p-4 rounded-md">{error ?? 'Case not found'}</div>
       </div>
     );
@@ -263,7 +263,7 @@ export function CaseDetailPage() {
   const hasLinkedCompensation = hasLinkedRefund || hasLinkedCredit;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+    <div className="w-full max-w-6xl mx-auto px-6 py-8 space-y-6">
       <div className="flex items-center gap-4">
         <Link
           to="/"
