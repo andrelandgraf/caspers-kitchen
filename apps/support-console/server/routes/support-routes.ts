@@ -39,8 +39,8 @@ const UpdateStatusBody = z.object({
   status: z.enum(['open', 'in_progress', 'resolved', 'closed']),
 });
 
-function hexToUuid(hex: string): string {
-  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join('-');
+function uuidToBytes(uuid: string): Buffer {
+  return Buffer.from(uuid.replace(/-/g, ''), 'hex');
 }
 
 export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
@@ -62,7 +62,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
       try {
         const result = await appkit.lakebase.query(`
           SELECT
-            REPLACE(sc.id::text, '-', '') AS case_id,
+            sc.id::text AS case_id,
             sc.user_id,
             u.name AS user_name,
             u.email AS user_email,
@@ -105,18 +105,12 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
     app.get('/api/cases/:caseId', async (req, res) => {
       try {
         const caseId = req.params.caseId;
-        const caseIdUuid = [
-          caseId.slice(0, 8),
-          caseId.slice(8, 12),
-          caseId.slice(12, 16),
-          caseId.slice(16, 20),
-          caseId.slice(20, 32),
-        ].join('-');
+        const caseIdHex = caseId.replace(/-/g, '');
 
         const caseResult = await appkit.lakebase.query(
           `
           SELECT
-            REPLACE(sc.id::text, '-', '') AS case_id,
+            sc.id::text AS case_id,
             sc.user_id,
             u.name AS user_name,
             u.email AS user_email,
@@ -162,7 +156,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           ) urc ON true
           WHERE sc.id = $1::uuid
         `,
-          [caseIdUuid]
+          [caseId]
         );
 
         if (caseResult.rows.length === 0) {
@@ -178,10 +172,10 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             content,
             created_at
           FROM public.support_messages
-          WHERE case_id::text = $1
+          WHERE case_id = $1::uuid
           ORDER BY created_at ASC
         `,
-          [caseIdUuid]
+          [caseId]
         );
 
         const agentResult = await appkit.lakebase.query(
@@ -199,7 +193,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           WHERE encode(case_id, 'hex') = $1
           ORDER BY generated_at DESC
         `,
-          [caseId]
+          [caseIdHex]
         );
 
         const userId = caseResult.rows[0].user_id as string;
@@ -241,8 +235,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           return;
         }
 
-        const caseIdBytes = Buffer.from(caseId, 'hex');
-        const caseIdUuid = hexToUuid(caseId);
+        const caseIdBytes = uuidToBytes(caseId);
 
         const adminResult = await appkit.lakebase.query(`SELECT id FROM public.admins LIMIT 1`);
         const adminId = adminResult.rows.length > 0 ? (adminResult.rows[0].id as string) : null;
@@ -263,14 +256,14 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             `INSERT INTO public.support_messages (case_id, admin_id, content)
              VALUES ($1::uuid, $2::uuid, $3)
              RETURNING id::text AS id, 'admin' AS role, content, created_at`,
-            [caseIdUuid, adminId, parsed.data.admin_response]
+            [caseId, adminId, parsed.data.admin_response]
           );
           message = msgResult.rows[0] ?? null;
 
           if (parsed.data.admin_action === 'resolve') {
             await appkit.lakebase.query(
               `UPDATE public.support_cases SET status = 'resolved', updated_at = NOW() WHERE id = $1::uuid`,
-              [caseIdUuid]
+              [caseId]
             );
           } else {
             await appkit.lakebase.query(
@@ -278,14 +271,14 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
                SET status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
                    updated_at = NOW()
                WHERE id = $1::uuid`,
-              [caseIdUuid]
+              [caseId]
             );
           }
         }
 
         const caseRow = await appkit.lakebase.query(
           `SELECT user_id FROM public.support_cases WHERE id = $1::uuid`,
-          [caseIdUuid]
+          [caseId]
         );
         const userId = caseRow.rows[0]?.user_id as string | undefined;
 
@@ -300,14 +293,14 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
             await appkit.lakebase.query(
               `INSERT INTO public.refunds (user_id, order_id, support_case_id, amount_in_cents, reason)
                VALUES ($1, $2::uuid, $3::uuid, $4, $5)`,
-              [userId, order.id, caseIdUuid, refundAmount, parsed.data.admin_response]
+              [userId, order.id, caseId, refundAmount, parsed.data.admin_response]
             );
           }
         } else if (userId && parsed.data.admin_action === 'credit' && parsed.data.admin_amount_cents > 0) {
           await appkit.lakebase.query(
             `INSERT INTO public.credits (user_id, support_case_id, amount_in_cents, reason)
              VALUES ($1, $2::uuid, $3, $4)`,
-            [userId, caseIdUuid, parsed.data.admin_amount_cents, parsed.data.admin_response]
+            [userId, caseId, parsed.data.admin_amount_cents, parsed.data.admin_response]
           );
         }
 
@@ -324,7 +317,7 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
     app.get('/api/cases/:caseId/decisions', async (req, res) => {
       try {
         const caseId = req.params.caseId;
-        const caseIdBytes = Buffer.from(caseId, 'hex');
+        const caseIdBytes = uuidToBytes(caseId);
 
         const result = await appkit.lakebase.query(
           `SELECT id, admin_action, admin_amount_cents, admin_response, created_at
@@ -350,13 +343,11 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           return;
         }
 
-        const caseIdUuid = hexToUuid(caseId);
-
         await appkit.lakebase.query(
           `UPDATE public.support_cases
            SET status = $1, updated_at = NOW()
            WHERE id = $2::uuid`,
-          [parsed.data.status, caseIdUuid]
+          [parsed.data.status, caseId]
         );
 
         res.json({ status: parsed.data.status });
