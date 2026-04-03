@@ -35,6 +35,11 @@
       "source": "databricks/databricks-agent-skills",
       "sourceType": "github",
       "computedHash": "6964e9845d1a97f108d240a3ca00257262444fe159a2ecae4f04b4c2a8649259"
+    },
+    "neon-postgres-egress-optimizer": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "computedHash": "425d23502e6f2ab24a8de852f95e37969720cb287368a1294d46aabb1f9408f8"
     }
   }
 }
