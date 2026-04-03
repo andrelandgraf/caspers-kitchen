@@ -116,6 +116,80 @@ databricks postgres delete-branch projects/<PROJECT_ID>/branches/<BRANCH_ID> \
 
 **Never delete the `production` branch** — it is the authoritative branch auto-provisioned at project creation.
 
+## App Service Principal Permissions — CRITICAL
+
+When a Databricks App connects to Lakebase with `CAN_CONNECT_AND_CREATE`, the app's **service principal (SP)** gets a Postgres role that can:
+- **Connect** to the database
+- **Create new schemas and tables** (which the SP will own)
+
+The SP **cannot** access schemas or tables created by other roles (human users, pipelines, etc.) unless explicitly granted. This is the #1 cause of `permission denied for schema X` errors after deployment.
+
+### Discovering the SP Role Name
+
+The SP's Postgres role name is its **client ID** (a UUID). Find it from the app:
+
+```bash
+databricks apps get <APP_NAME> --profile <PROFILE> -o json
+# → .service_principal_client_id is the Postgres role name
+```
+
+### Granting Cross-Schema Access
+
+When an app needs to read/write schemas it did not create (e.g. `public`, `gold`, or any schema populated by pipelines or human users), you must connect as the **schema owner** and grant access to the SP role.
+
+**Step 1 — Generate credentials and connect as the owner:**
+
+```bash
+databricks postgres generate-database-credential \
+  projects/<PROJECT_ID>/branches/<BRANCH_ID>/endpoints/<ENDPOINT_ID> \
+  --profile <PROFILE>
+```
+
+Use the returned token as the password for `psql`:
+
+```bash
+PGPASSWORD=<token> psql "host=<ENDPOINT_HOST> dbname=<DB_NAME> sslmode=require user=<YOUR_EMAIL>"
+```
+
+**Step 2 — Grant permissions** (replace `<SP_CLIENT_ID>` with the UUID from step above):
+
+```sql
+-- Read-only access to a schema (e.g. gold, synced from lakehouse)
+GRANT USAGE ON SCHEMA gold TO "<SP_CLIENT_ID>";
+GRANT SELECT ON ALL TABLES IN SCHEMA gold TO "<SP_CLIENT_ID>";
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER_ROLE>" IN SCHEMA gold
+  GRANT SELECT ON TABLES TO "<SP_CLIENT_ID>";
+
+-- Read-write access to a schema (e.g. public)
+GRANT USAGE ON SCHEMA public TO "<SP_CLIENT_ID>";
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO "<SP_CLIENT_ID>";
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO "<SP_CLIENT_ID>";
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER_ROLE>" IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE ON TABLES TO "<SP_CLIENT_ID>";
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER_ROLE>" IN SCHEMA public
+  GRANT USAGE ON SEQUENCES TO "<SP_CLIENT_ID>";
+
+-- Full access to an app-managed schema (e.g. support_console)
+GRANT USAGE, CREATE ON SCHEMA support_console TO "<SP_CLIENT_ID>";
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA support_console TO "<SP_CLIENT_ID>";
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA support_console TO "<SP_CLIENT_ID>";
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER_ROLE>" IN SCHEMA support_console
+  GRANT ALL ON TABLES TO "<SP_CLIENT_ID>";
+```
+
+`<OWNER_ROLE>` is typically your email (the human user who created the schema). Check ownership with:
+
+```sql
+SELECT schema_name, schema_owner FROM information_schema.schemata;
+```
+
+**Step 3 — `ALTER DEFAULT PRIVILEGES` is essential.** Without it, new tables created by pipelines or migrations (under the owner role) will not be visible to the SP. This prevents the permissions from breaking again when data is re-synced.
+
+### Ownership vs Grants
+
+- **Ownership transfer** (`ALTER ... OWNER TO`) requires `SET ROLE` privilege, which Lakebase may not grant between human and SP roles. Use `GRANT` instead.
+- **AppKit cache**: AppKit creates an `appkit` schema at startup for persistent caching. If a human user previously created it, the SP gets `permission denied` or `must be owner`. Fix: `DROP SCHEMA appkit CASCADE` so the SP recreates it on next deploy (the cache is ephemeral and safe to drop).
+
 ## What's Next
 
 ### Build a Databricks App
@@ -178,5 +252,7 @@ databricks postgres create-endpoint projects/<PROJECT_ID>/branches/<BRANCH_ID> <
 |-------|----------|
 | `cannot configure default credentials` | Use `--profile` flag or authenticate first |
 | `PERMISSION_DENIED` | Check workspace permissions |
+| `permission denied for schema X` | App SP lacks access to a pre-existing schema. See **App Service Principal Permissions** above |
+| `must be owner of table X` | Object was created by a different role. `DROP` and let the SP recreate, or `GRANT ALL` to the SP |
 | Protected branch cannot be deleted | `update-branch` to set `spec.is_protected` to `false` first |
 | Long-running operation timeout | Use `--no-wait` and poll with `get-operation` |

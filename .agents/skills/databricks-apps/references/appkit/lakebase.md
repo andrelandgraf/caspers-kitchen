@@ -202,11 +202,56 @@ LAKEBASE_ENDPOINT=projects/<PROJECT_ID>/branches/<BRANCH_ID>/endpoints/<ENDPOINT
 
 Load `server/.env` in your dev server (e.g. via `dotenv` or `node --env-file=server/.env`). Never commit `.env` files — add `server/.env` to `.gitignore`.
 
+## Cross-Schema Access (Pre-Existing Schemas)
+
+When your app queries schemas it did **not** create (e.g. `public`, `gold`, or schemas populated by pipelines/sync jobs), the SP needs explicit grants from the schema owner.
+
+**The `CAN_CONNECT_AND_CREATE` permission only lets the SP create and access its own objects.** Pre-existing schemas/tables owned by other roles are invisible to the SP.
+
+### Diagnosing the SP Role
+
+```bash
+# Get the SP Postgres role name (it's the client ID UUID)
+databricks apps get <APP_NAME> --profile <PROFILE> -o json
+# → .service_principal_client_id
+```
+
+### Granting Access
+
+Connect as the schema owner (typically your email) and grant:
+
+```sql
+-- Read-only schema (synced data, analytics)
+GRANT USAGE ON SCHEMA gold TO "<SP_CLIENT_ID>";
+GRANT SELECT ON ALL TABLES IN SCHEMA gold TO "<SP_CLIENT_ID>";
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER>" IN SCHEMA gold
+  GRANT SELECT ON TABLES TO "<SP_CLIENT_ID>";
+
+-- Read-write schema (public, app CRUD)
+GRANT USAGE ON SCHEMA public TO "<SP_CLIENT_ID>";
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO "<SP_CLIENT_ID>";
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO "<SP_CLIENT_ID>";
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER>" IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE ON TABLES TO "<SP_CLIENT_ID>";
+
+-- App-owned schema created by human (needs ownership handoff)
+GRANT USAGE, CREATE ON SCHEMA app_data TO "<SP_CLIENT_ID>";
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA app_data TO "<SP_CLIENT_ID>";
+```
+
+**`ALTER DEFAULT PRIVILEGES` prevents recurring permission errors** when the owner creates new tables (e.g. pipeline sync adds new tables to `gold`).
+
+### AppKit Cache Schema
+
+AppKit creates an `appkit` schema for persistent caching. If a human previously created it, the SP cannot run migrations. Fix: `DROP SCHEMA appkit CASCADE` and redeploy — the SP recreates it as the owner. The cache is ephemeral and safe to drop.
+
 ## Troubleshooting
 
 | Error | Cause | Solution |
 |-------|-------|---------|
-| `permission denied for schema public` | Service Principal lacks access to `public` | Create custom schema: `CREATE SCHEMA IF NOT EXISTS app_data` |
+| `permission denied for schema public` | SP lacks access to `public` | Create a custom schema, or grant USAGE to the SP (see above) |
+| `permission denied for schema X` | SP lacks access to a pre-existing schema | Grant USAGE + table permissions to the SP (see above) |
+| `must be owner of table X` | Object owned by a different role | `DROP` the object and let SP recreate, or `GRANT ALL` to SP |
 | `connection refused` | Pool not connected or wrong env vars | Check `PGHOST`, `PGPORT`, `LAKEBASE_ENDPOINT` are set |
 | `relation "X" does not exist` | Tables not initialized | Run `CREATE TABLE IF NOT EXISTS` at startup |
 | App builds but pool fails at runtime | Env vars not set locally | Set vars in `server/.env` — see Local Development above |
