@@ -85,13 +85,8 @@ function AgentHistory({ responses }: { responses: AgentResponse[] }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="flex items-center justify-between w-full text-left"
-        >
-          <CardTitle className="text-sm">
-            Past Agent Drafts ({responses.length})
-          </CardTitle>
+        <button onClick={() => setExpanded((v) => !v)} className="flex items-center justify-between w-full text-left">
+          <CardTitle className="text-sm">Past Agent Drafts ({responses.length})</CardTitle>
           <ChevronDown
             className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
           />
@@ -371,12 +366,7 @@ export function CaseDetailPage() {
                 {(draftAction === 'refund' || draftAction === 'credit') && (
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">Amount (cents)</label>
-                    <Input
-                      type="number"
-                      value={draftAmount}
-                      onChange={(e) => setDraftAmount(e.target.value)}
-                      min={0}
-                    />
+                    <Input type="number" value={draftAmount} onChange={(e) => setDraftAmount(e.target.value)} min={0} />
                   </div>
                 )}
 

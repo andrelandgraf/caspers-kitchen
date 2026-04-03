@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import {
   useAnalyticsQuery,
   BarChart,
+  GenieChat,
   Card,
   CardContent,
   CardHeader,
@@ -20,15 +22,21 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
   );
 }
 
-export function AnalyticsPage() {
-  const { data: metrics, loading: metricsLoading } = useAnalyticsQuery('support_metrics', {});
+type Tab = 'dashboard' | 'genie';
 
+const tabClass = (active: boolean) =>
+  `px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+    active
+      ? 'border-foreground text-foreground'
+      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+  }`;
+
+function DashboardTab() {
+  const { data: metrics, loading: metricsLoading } = useAnalyticsQuery('support_metrics', {});
   const latest = metrics && metrics.length > 0 ? metrics[0] : null;
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-      <h2 className="text-2xl font-bold tracking-tight">Support Analytics</h2>
-
+    <div className="space-y-8">
       {metricsLoading && (
         <div className="grid grid-cols-4 gap-4">
           {Array.from({ length: 4 }, (_, i) => (
@@ -83,6 +91,54 @@ export function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function GenieTab() {
+  return (
+    <Card className="flex-1 flex flex-col overflow-hidden">
+      <CardHeader className="shrink-0 pb-2">
+        <CardTitle className="text-sm">Ask Genie</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Ask questions about orders, revenue, support cases, customers, and more.
+        </p>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-hidden p-0">
+        <GenieChat alias="default" placeholder="e.g. What was our total revenue this week?" className="h-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function AnalyticsPage() {
+  const [tab, setTab] = useState<Tab>('dashboard');
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="max-w-5xl mx-auto w-full px-6 pt-6 pb-2 flex items-center justify-between">
+        <h2 className="text-2xl font-bold tracking-tight">Analytics</h2>
+        <div className="flex gap-1">
+          <button type="button" className={tabClass(tab === 'dashboard')} onClick={() => setTab('dashboard')}>
+            Dashboard
+          </button>
+          <button type="button" className={tabClass(tab === 'genie')} onClick={() => setTab('genie')}>
+            Ask Genie
+          </button>
+        </div>
+      </div>
+
+      {tab === 'dashboard' && (
+        <div className="max-w-5xl mx-auto w-full px-6 py-6">
+          <DashboardTab />
+        </div>
+      )}
+
+      {tab === 'genie' && (
+        <div className="max-w-5xl mx-auto w-full px-6 py-4 flex-1 flex flex-col min-h-0">
+          <GenieTab />
+        </div>
+      )}
     </div>
   );
 }

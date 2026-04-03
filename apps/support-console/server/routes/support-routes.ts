@@ -276,10 +276,9 @@ export async function setupSupportRoutes(appkit: AppKitWithLakebase) {
           }
         }
 
-        const caseRow = await appkit.lakebase.query(
-          `SELECT user_id FROM public.support_cases WHERE id = $1::uuid`,
-          [caseId]
-        );
+        const caseRow = await appkit.lakebase.query(`SELECT user_id FROM public.support_cases WHERE id = $1::uuid`, [
+          caseId,
+        ]);
         const userId = caseRow.rows[0]?.user_id as string | undefined;
 
         if (userId && parsed.data.admin_action === 'refund' && parsed.data.admin_amount_cents > 0) {

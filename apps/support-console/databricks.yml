@@ -4,6 +4,8 @@ bundle:
 variables:
   sql_warehouse_id:
     description: SQL Warehouse ID
+  genie_space_id:
+    description: Genie Space ID for AI/BI natural language queries
   postgres_branch:
     description: Full Lakebase Postgres branch resource name. Obtain by running `databricks postgres list-branches projects/{project-id}`, select the desired item from the output array and use its .name value.
   postgres_database:
@@ -15,16 +17,19 @@ resources:
       name: 'support-console'
       description: 'Internal support console for Caspers Kitchen admins'
       source_code_path: ./
-      # Uncomment to enable on behalf of user API scopes. Available scopes: sql, dashboards.genie, files.files
-      # user_api_scopes:
-      #   - sql
+      user_api_scopes:
+        - sql
+        - dashboards.genie
 
-      # The resources which this app has access to.
       resources:
         - name: sql-warehouse
           sql_warehouse:
             id: ${var.sql_warehouse_id}
             permission: CAN_USE
+        - name: genie-space
+          genie_space:
+            id: ${var.genie_space_id}
+            permission: CAN_RUN
         - name: postgres
           postgres:
             branch: ${var.postgres_branch}
@@ -39,5 +44,6 @@ targets:
 
     variables:
       sql_warehouse_id: e5ed18828056f3cf
+      genie_space_id: 01f12f7a53a71c39bdb22d5fa4ce8013
       postgres_branch: projects/caspers-prod-db/branches/production
       postgres_database: projects/caspers-prod-db/branches/production/databases/db-90b4-79eo1vg3iv

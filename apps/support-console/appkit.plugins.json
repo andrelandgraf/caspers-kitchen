@@ -73,7 +73,8 @@
           }
         ],
         "optional": []
-      }
+      },
+      "requiredByTemplate": true
     },
     "lakebase": {
       "name": "lakebase",

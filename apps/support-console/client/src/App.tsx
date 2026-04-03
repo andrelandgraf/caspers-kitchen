@@ -26,7 +26,7 @@ function Layout() {
         <span className="text-xs text-muted-foreground uppercase tracking-widest">Support Console</span>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 flex flex-col min-h-0">
         <Outlet />
       </main>
     </div>

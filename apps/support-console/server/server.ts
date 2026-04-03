@@ -1,8 +1,8 @@
-import { createApp, analytics, lakebase, server } from '@databricks/appkit';
+import { createApp, analytics, genie, lakebase, server } from '@databricks/appkit';
 import { setupSupportRoutes } from './routes/support-routes';
 
 createApp({
-  plugins: [server({ autoStart: false }), analytics(), lakebase()],
+  plugins: [server({ autoStart: false }), analytics(), genie(), lakebase()],
 })
   .then(async (appkit) => {
     await setupSupportRoutes(appkit);
