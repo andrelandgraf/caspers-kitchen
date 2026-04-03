@@ -3,6 +3,10 @@ resources:
     support_agent_job:
       name: support_agent_job
 
+      max_concurrent_runs: 1
+      queue:
+        enabled: false
+
       schedule:
         quartz_cron_expression: "0 * * * * ?"
         timezone_id: UTC
