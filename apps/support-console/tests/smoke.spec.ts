@@ -8,5 +8,5 @@ test('case queue page loads', async ({ page }) => {
 
 test('analytics page loads', async ({ page }) => {
   await page.goto('/analytics');
-  await expect(page.getByRole('heading', { name: 'Support Analytics' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Analytics' })).toBeVisible();
 });
