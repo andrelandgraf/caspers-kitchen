@@ -15,18 +15,29 @@ This monorepo contains parts of the Caspers Kitchen system (relevant to the demo
 
 This project uses **npm** (not bun, yarn, or pnpm). Do not generate `bun.lock`, `yarn.lock`, or `pnpm-lock.yaml` files.
 
-# Dev Workflow
+# Feature Development Workflow
 
-After every atomic feature change, follow this loop until everything is green:
+For every feature, follow this end-to-end workflow:
 
-1. **Verify and fix** — run `typecheck`, `build`, `fmt` (in `apps/api`). Fix every error before moving on.
-2. **Commit** — one clean commit per atomic change.
-3. **Push** — push to `main`.
-4. **Verify deploy** — run `vercel ls` from the **monorepo root** (where `.vercel/project.json` lives) and confirm the latest production deployment shows **● Ready**. If it shows **● Error**, run `vercel inspect <url>` to diagnose. **Never run `vercel link` from a subdirectory** — the Vercel project is linked at the repo root.
-5. **Verify cron** — confirm `/api/cron/simulate` is returning **200** on its every-5-minute schedule. Use `vercel logs` (streaming, from the repo root) or check the Vercel dashboard.
-6. **Iterate** — if the deploy or cron fails, find the root cause, fix it, and restart from step 1. Never stop with issues still persisting.
+1. **Branch** — switch to `main`, pull latest, create a new git branch for the feature.
+2. **Lakebase branch** — create a new Lakebase branch off `production` with a 1-day TTL (`"ttl": "86400s"`). Use this branch for all local development and testing.
+3. **Run locally** — start the app locally against the new Lakebase branch.
+4. **Smoke test** — use agent browser to verify both the Next.js app and the support console run successfully on localhost.
+5. **Develop** — implement the feature. For each atomic change, run `typecheck`, `build`, `fmt` (in `apps/api`) and fix every error before moving on.
+6. **Test locally** — use agent browser to verify the feature works end-to-end on localhost.
+7. **Push & PR** — push the git branch and create a pull request. Do **not** merge yet.
+8. **Verify deploy** — after the PR preview deploy succeeds, run `vercel ls` from the **monorepo root** and confirm the deployment shows **● Ready**. If it shows **● Error**, run `vercel inspect <url>` to diagnose. **Never run `vercel link` from a subdirectory.**
+9. **Merge & apply schema** — only after the PR is merged, apply any schema changes to the Lakebase `production` branch. Never apply schema changes to production before the PR is merged.
+10. **Verify production** — confirm the production deployment is Ready and `/api/cron/simulate` is returning **200** on its every-5-minute schedule. Use `vercel logs` (streaming, from the repo root) or check the Vercel dashboard.
+11. **Iterate** — if the deploy or cron fails, find the root cause, fix it, and restart from step 5. Never stop with issues still persisting.
 
-Pushing to GitHub is **not** the last step — the task is only done when the production deployment is Ready and the cron job is healthy.
+The task is only done when the production deployment is Ready and the cron job is healthy.
+
+## Lakebase Schema Changes
+
+- **Forward-compatible only** — never break the existing schema. Add columns as nullable, add new tables, add new indexes. Do not rename or drop columns/tables that production code depends on.
+- **Test first** — always apply and validate schema changes on the Lakebase test branch before touching production.
+- **Production last** — only apply schema changes to the `production` branch after the corresponding code PR is merged.
 
 Principles:
 
