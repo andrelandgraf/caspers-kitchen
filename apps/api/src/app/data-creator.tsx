@@ -110,6 +110,15 @@ function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 5);
 }
 
+const REGION_TIMEZONES: Record<string, string> = {
+  us_east: "America/New_York",
+  us_central: "America/Chicago",
+  us_west: "America/Los_Angeles",
+  eu_west: "Europe/London",
+};
+
+const REGIONS = Object.keys(REGION_TIMEZONES);
+
 function deriveEmail(name: string, suffix: string): string {
   const parts = name.trim().split(/\s+/);
   const first = (parts[0] ?? "user").toLowerCase();
@@ -252,6 +261,15 @@ export default function DataCreator({ simPassword }: DataCreatorProps) {
         password: simPassword,
       });
       if (signInErr) throw new Error(signInErr.message ?? "Sign in failed");
+
+      const region = randomPick(REGIONS);
+      const timeZone = REGION_TIMEZONES[region];
+      const patchRes = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region, timeZone }),
+      });
+      if (!patchRes.ok) throw new Error("Failed to set user region");
 
       setConfirmedUser({ name: userName, email: userEmail });
       setCurrentStep(2);
