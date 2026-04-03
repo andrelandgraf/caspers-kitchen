@@ -34,7 +34,7 @@
   "dependencies": {
     "@databricks/appkit": "0.21.0",
     "@databricks/appkit-ui": "0.21.0",
-    "@databricks/sdk-experimental": "0.14.2",
+    "@databricks/sdk-experimental": "^0.16.0",
     "clsx": "2.1.1",
     "embla-carousel-react": "8.6.0",
     "lucide-react": "0.546.0",
@@ -44,8 +44,8 @@
     "react-resizable-panels": "3.0.6",
     "react-router": "7.13.0",
     "tailwind-merge": "3.3.1",
-    "tw-animate-css": "1.4.0",
     "tailwindcss-animate": "1.0.7",
+    "tw-animate-css": "1.4.0",
     "zod": "4.1.13"
   },
   "devDependencies": {
