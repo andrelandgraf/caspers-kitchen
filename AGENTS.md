@@ -36,6 +36,11 @@ Principles:
 - **Good error messages** — every assert and throw should explain what went wrong and what was expected.
 - **Fail early** — validate inputs and env vars at the boundary, not deep in business logic.
 
+# Tools
+
+- Use the `databricks` CLI with default profile (`DEFAULT`) for all Databricks infra management. Report if auth is expired and prompt for re-auth.
+- Use the `vercel` CLI for Vercel deployment management. Report if auth is expired and prompt for re-auth.
+
 # Vercel (API)
 
 - The Vercel project is linked at the **monorepo root** (`/.vercel/project.json`). All `vercel` CLI commands (`ls`, `inspect`, `logs`) must run from the repo root — **never** from `apps/api` or any subdirectory.
