@@ -9,7 +9,7 @@ import { simulationConfig } from "./env";
 import { authConfig } from "@/lib/auth/config";
 
 export const DEFAULT_BASE_RATES: BaseRates = {
-  signupsPerTick: 0.8,
+  signupsPerTick: 8,
   activeUsersPerTick: 10,
   cartAddsPerTick: 4,
   checkoutsPerTick: 3,
@@ -63,7 +63,7 @@ export const DEFAULT_GEO_PROFILE: GeoProfile = {
 
 export const DEFAULT_SAFETY_CAPS: SafetyCaps = {
   maxActionsPerTick: 50,
-  maxSignupsPerDay: 300,
+  maxSignupsPerDay: 3000,
 };
 
 export const REGIONS = Object.keys(DEFAULT_GEO_PROFILE);
