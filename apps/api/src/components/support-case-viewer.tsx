@@ -174,6 +174,13 @@ export function SupportCaseViewer({
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <MessageCircle className="size-4 text-muted-foreground" />
         <span className="text-sm font-medium">Support Chat</span>
+        <span
+          className="relative flex size-2"
+          title="Live — polling for updates"
+        >
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+        </span>
         <CopyableCaseId caseId={caseId} />
       </div>
 
