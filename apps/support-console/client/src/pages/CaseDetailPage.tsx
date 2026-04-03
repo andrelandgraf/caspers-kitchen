@@ -14,9 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@databricks/appkit-ui/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router';
-import { ArrowLeft, Send, Check, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Send, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { ActionBadge } from '../components/ActionBadge';
 
 interface CaseDetail {
@@ -71,10 +71,6 @@ interface CaseDetailResponse {
   messages: Message[];
   agentResponses: AgentResponse[];
   userProfile: UserProfile | null;
-}
-
-interface DecisionResponse {
-  message: Message | null;
 }
 
 const CASE_STATUSES = ['open', 'in_progress', 'resolved', 'closed'] as const;
@@ -141,9 +137,9 @@ export function CaseDetailPage() {
   const [caseStatus, setCaseStatus] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     if (!caseId) return;
-    fetch(`/api/cases/${caseId}`)
+    return fetch(`/api/cases/${caseId}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch case: ${res.statusText}`);
         return res.json() as Promise<CaseDetailResponse>;
@@ -152,15 +148,24 @@ export function CaseDetailPage() {
         setData(d);
         setCaseStatus(d.case.status);
         const latest = d.agentResponses[0];
-        if (latest) {
+        if (latest && !submitted) {
           setDraftResponse(latest.suggested_response);
           setDraftAction(latest.suggested_action);
           setDraftAmount(String(latest.suggested_amount_cents));
         }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load case'))
-      .finally(() => setLoading(false));
-  }, [caseId]);
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load case'));
+  }, [caseId, submitted]);
+
+  useEffect(() => {
+    refetch()?.finally(() => setLoading(false));
+  }, [refetch]);
+
+  useEffect(() => {
+    if (!caseId || loading) return;
+    const interval = setInterval(() => refetch(), 10_000);
+    return () => clearInterval(interval);
+  }, [caseId, loading, refetch]);
 
   async function handleSubmit() {
     if (!caseId || !draftResponse.trim()) return;
@@ -177,14 +182,8 @@ export function CaseDetailPage() {
         }),
       });
       if (!res.ok) throw new Error('Failed to submit');
-      const result = (await res.json()) as DecisionResponse;
-      if (result.message && data) {
-        setData({
-          ...data,
-          messages: [...data.messages, result.message],
-        });
-      }
       setSubmitted(true);
+      await refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submit failed');
     } finally {
@@ -257,6 +256,9 @@ export function CaseDetailPage() {
         </Link>
         <Separator orientation="vertical" className="h-4" />
         <h2 className="text-lg font-semibold">{caseData.subject}</h2>
+        <code className="font-mono text-xs bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground">
+          {caseData.case_id.slice(0, 8)}
+        </code>
         <Badge variant={caseStatus === 'resolved' || caseStatus === 'closed' ? 'outline' : 'secondary'}>
           {caseStatus}
         </Badge>
@@ -403,7 +405,10 @@ export function CaseDetailPage() {
           ) : (
             <Card>
               <CardContent className="py-12 text-center">
-                <p className="text-sm text-muted-foreground">No agent response available for this case.</p>
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Waiting for agent response...</p>
+                </div>
               </CardContent>
             </Card>
           )}
