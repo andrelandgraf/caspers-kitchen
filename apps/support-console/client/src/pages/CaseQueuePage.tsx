@@ -1,4 +1,4 @@
-import { Badge, Skeleton } from '@databricks/appkit-ui/react';
+import { Badge, Input, Skeleton } from '@databricks/appkit-ui/react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { ActionBadge } from '../components/ActionBadge';
@@ -34,6 +34,7 @@ export function CaseQueuePage() {
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,14 +48,24 @@ export function CaseQueuePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const openCases = cases.filter((c) => c.status !== 'resolved' && c.status !== 'closed');
-  const resolvedCases = cases.filter((c) => c.status === 'resolved' || c.status === 'closed');
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? cases.filter((c) => c.case_id.toLowerCase().includes(query) || c.subject.toLowerCase().includes(query))
+    : cases;
+  const openCases = filtered.filter((c) => c.status !== 'resolved' && c.status !== 'closed');
+  const resolvedCases = filtered.filter((c) => c.status === 'resolved' || c.status === 'closed');
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Cases</h2>
-        <span className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-2xl font-bold tracking-tight shrink-0">Cases</h2>
+        <Input
+          placeholder="Search by case ID or subject…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+        <span className="text-sm text-muted-foreground shrink-0">
           {openCases.length} open &middot; {resolvedCases.length} resolved
         </span>
       </div>
@@ -69,8 +80,10 @@ export function CaseQueuePage() {
         </div>
       )}
 
-      {!loading && cases.length === 0 && (
-        <p className="text-muted-foreground text-center py-16">No support cases found.</p>
+      {!loading && filtered.length === 0 && (
+        <p className="text-muted-foreground text-center py-16">
+          {query ? 'No cases match your search.' : 'No support cases found.'}
+        </p>
       )}
 
       {!loading && openCases.length > 0 && (
