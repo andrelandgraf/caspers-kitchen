@@ -17,10 +17,6 @@ resources:
       name: 'support-console'
       description: 'Internal support console for Caspers Kitchen admins'
       source_code_path: ./
-      user_api_scopes:
-        - sql
-        - dashboards.genie
-
       resources:
         - name: sql-warehouse
           sql_warehouse:
@@ -28,7 +24,8 @@ resources:
             permission: CAN_USE
         - name: genie-space
           genie_space:
-            id: ${var.genie_space_id}
+            name: genie-space
+            space_id: ${var.genie_space_id}
             permission: CAN_RUN
         - name: postgres
           postgres:
