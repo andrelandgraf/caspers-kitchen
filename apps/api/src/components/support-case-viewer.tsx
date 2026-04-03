@@ -17,6 +17,8 @@ import {
   MessageCircle,
   Copy,
   Check,
+  BadgeDollarSign,
+  RotateCcw,
 } from "lucide-react";
 
 export interface SupportMessage {
@@ -26,6 +28,26 @@ export interface SupportMessage {
   adminId: string | null;
   content: string;
   createdAt: string;
+}
+
+interface CaseRefund {
+  id: string;
+  amountInCents: number;
+  reason: string;
+  status: "pending" | "processed" | "failed";
+  createdAt: string;
+}
+
+interface CaseCredit {
+  id: string;
+  amountInCents: number;
+  reason: string;
+  createdAt: string;
+}
+
+interface CaseActivity {
+  refunds: CaseRefund[];
+  credits: CaseCredit[];
 }
 
 interface SupportCaseViewerProps {
@@ -82,6 +104,10 @@ export function SupportCaseViewer({
   const [messages, setMessages] = useState<SupportMessage[]>(
     initialMessages ?? [],
   );
+  const [activity, setActivity] = useState<CaseActivity>({
+    refunds: [],
+    credits: [],
+  });
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -109,10 +135,18 @@ export function SupportCaseViewer({
 
   const fetchMessages = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/support/${id}/messages`);
-      if (!res.ok) return;
-      const msgs: SupportMessage[] = await res.json();
-      setMessages(msgs);
+      const [msgRes, actRes] = await Promise.all([
+        fetch(`/api/support/${id}/messages`),
+        fetch(`/api/support/${id}/activity`),
+      ]);
+      if (msgRes.ok) {
+        const msgs: SupportMessage[] = await msgRes.json();
+        setMessages(msgs);
+      }
+      if (actRes.ok) {
+        const act: CaseActivity = await actRes.json();
+        setActivity(act);
+      }
     } catch {
       // ignore polling errors
     }
@@ -183,6 +217,30 @@ export function SupportCaseViewer({
         </span>
         <CopyableCaseId caseId={caseId} />
       </div>
+
+      {/* Activity cards — credits & refunds */}
+      {(activity.credits.length > 0 || activity.refunds.length > 0) && (
+        <div className="flex flex-wrap gap-2 border-b border-border px-4 py-2.5">
+          {activity.credits.map((c) => (
+            <ActivityCard
+              key={c.id}
+              icon={<BadgeDollarSign className="size-3.5" />}
+              label={`$${(c.amountInCents / 100).toFixed(2)} credit applied`}
+              sublabel={c.reason}
+              variant="credit"
+            />
+          ))}
+          {activity.refunds.map((r) => (
+            <ActivityCard
+              key={r.id}
+              icon={<RotateCcw className="size-3.5" />}
+              label={`$${(r.amountInCents / 100).toFixed(2)} refund ${r.status === "processed" ? "issued" : r.status}`}
+              sublabel={r.reason}
+              variant={r.status === "failed" ? "failed" : "refund"}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Messages area */}
       <div
@@ -293,6 +351,35 @@ export function SupportCaseViewer({
           )}
         </Button>
       </form>
+    </div>
+  );
+}
+
+const activityVariants = {
+  credit: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
+  refund: "bg-sky-500/10 text-sky-400 ring-sky-500/20",
+  failed: "bg-red-500/10 text-red-400 ring-red-500/20",
+} as const;
+
+function ActivityCard({
+  icon,
+  label,
+  sublabel,
+  variant,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  sublabel: string;
+  variant: keyof typeof activityVariants;
+}) {
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${activityVariants[variant]}`}
+    >
+      {icon}
+      <span>{label}</span>
+      <span className="opacity-60">&middot;</span>
+      <span className="opacity-60 font-normal">{sublabel}</span>
     </div>
   );
 }
