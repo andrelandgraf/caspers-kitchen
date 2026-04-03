@@ -218,24 +218,22 @@ export function SupportCaseViewer({
         <CopyableCaseId caseId={caseId} />
       </div>
 
-      {/* Activity cards — credits & refunds */}
+      {/* Activity tags — credits & refunds */}
       {(activity.credits.length > 0 || activity.refunds.length > 0) && (
-        <div className="flex flex-wrap gap-2 border-b border-border px-4 py-2.5">
+        <div className="flex flex-wrap gap-1.5 border-b border-border px-4 py-2">
           {activity.credits.map((c) => (
-            <ActivityCard
+            <ActivityTag
               key={c.id}
-              icon={<BadgeDollarSign className="size-3.5" />}
-              label={`$${(c.amountInCents / 100).toFixed(2)} credit applied`}
-              sublabel={c.reason}
+              icon={<BadgeDollarSign className="size-3" />}
+              label={`$${(c.amountInCents / 100).toFixed(2)} credit`}
               variant="credit"
             />
           ))}
           {activity.refunds.map((r) => (
-            <ActivityCard
+            <ActivityTag
               key={r.id}
-              icon={<RotateCcw className="size-3.5" />}
-              label={`$${(r.amountInCents / 100).toFixed(2)} refund ${r.status === "processed" ? "issued" : r.status}`}
-              sublabel={r.reason}
+              icon={<RotateCcw className="size-3" />}
+              label={`$${(r.amountInCents / 100).toFixed(2)} refund`}
               variant={r.status === "failed" ? "failed" : "refund"}
             />
           ))}
@@ -355,32 +353,28 @@ export function SupportCaseViewer({
   );
 }
 
-const activityVariants = {
-  credit: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
-  refund: "bg-sky-500/10 text-sky-400 ring-sky-500/20",
-  failed: "bg-red-500/10 text-red-400 ring-red-500/20",
+const tagVariants = {
+  credit: "bg-emerald-500/10 text-emerald-400",
+  refund: "bg-sky-500/10 text-sky-400",
+  failed: "bg-red-500/10 text-red-400",
 } as const;
 
-function ActivityCard({
+function ActivityTag({
   icon,
   label,
-  sublabel,
   variant,
 }: {
   icon: React.ReactNode;
   label: string;
-  sublabel: string;
-  variant: keyof typeof activityVariants;
+  variant: keyof typeof tagVariants;
 }) {
   return (
-    <div
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${activityVariants[variant]}`}
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${tagVariants[variant]}`}
     >
       {icon}
-      <span>{label}</span>
-      <span className="opacity-60">&middot;</span>
-      <span className="opacity-60 font-normal">{sublabel}</span>
-    </div>
+      {label}
+    </span>
   );
 }
 
