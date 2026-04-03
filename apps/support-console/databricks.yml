@@ -17,6 +17,7 @@ resources:
       name: 'support-console'
       description: 'Internal support console for Caspers Kitchen admins'
       source_code_path: ./
+      # user_api_scopes set via `databricks apps update` (Terraform provider bug prevents bundle-managed scopes)
       resources:
         - name: sql-warehouse
           sql_warehouse:
