@@ -1,11 +1,14 @@
 import { Badge, Input, Skeleton } from '@databricks/appkit-ui/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { ActionBadge } from '../components/ActionBadge';
+import { normaliseToUuid } from '../lib/utils';
 
 interface CaseRow {
   case_id: string;
+  user_id: string;
   user_name: string;
+  user_email: string;
   subject: string;
   status: string;
   case_created_at: string;
@@ -54,8 +57,22 @@ export function CaseQueuePage() {
   }, []);
 
   const query = search.trim().toLowerCase();
+  const normalisedUuid = useMemo(() => normaliseToUuid(search), [search]);
+
   const filtered = query
-    ? cases.filter((c) => c.case_id.toLowerCase().includes(query) || c.subject.toLowerCase().includes(query))
+    ? cases.filter((c) => {
+        if (normalisedUuid) {
+          if (c.case_id.toLowerCase() === normalisedUuid || c.user_id.toLowerCase() === normalisedUuid) return true;
+        }
+        return (
+          c.case_id.toLowerCase().includes(query) ||
+          c.user_id.toLowerCase().includes(query) ||
+          c.subject.toLowerCase().includes(query) ||
+          c.user_name.toLowerCase().includes(query) ||
+          c.user_email.toLowerCase().includes(query) ||
+          (c.suggested_action?.toLowerCase().includes(query) ?? false)
+        );
+      })
     : cases;
   const openCases = filtered.filter((c) => c.status !== 'resolved' && c.status !== 'closed');
   const resolvedCases = filtered.filter((c) => c.status === 'resolved' || c.status === 'closed');
@@ -65,7 +82,7 @@ export function CaseQueuePage() {
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-2xl font-bold tracking-tight shrink-0">Cases</h2>
         <Input
-          placeholder="Search by case ID or subject…"
+          placeholder="Search by case ID, user ID, subject, or action…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
