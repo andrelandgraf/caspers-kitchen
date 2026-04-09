@@ -261,6 +261,113 @@ databricks postgres create-endpoint projects/<PROJECT_ID>/branches/<BRANCH_ID> <
   --json '{"spec": {"type": "ENDPOINT_TYPE_READ_ONLY"}}' --profile <PROFILE>
 ```
 
+## Query Performance Diagnostics
+
+Lakebase ships with `pg_stat_statements` enabled by default. Use these queries to identify slow queries, cache efficiency, and currently running operations.
+
+### Connecting via psql
+
+Generate a short-lived credential and connect:
+
+```bash
+databricks postgres generate-database-credential \
+  projects/<PROJECT_ID>/branches/<BRANCH_ID>/endpoints/<ENDPOINT_ID> \
+  --profile <PROFILE>
+```
+
+```bash
+PGPASSWORD=<token> psql "host=<ENDPOINT_HOST> dbname=<DB_NAME> sslmode=require user=<YOUR_EMAIL>"
+```
+
+### Slow Queries (pg_stat_statements)
+
+Top queries by mean execution time — the primary tool for finding performance bottlenecks:
+
+```sql
+SELECT
+  LEFT(query, 120) AS query_preview,
+  calls,
+  ROUND(total_exec_time::numeric, 2) AS total_ms,
+  ROUND(mean_exec_time::numeric, 2) AS mean_ms,
+  ROUND(min_exec_time::numeric, 2) AS min_ms,
+  ROUND(max_exec_time::numeric, 2) AS max_ms,
+  rows,
+  shared_blks_hit,
+  shared_blks_read
+FROM pg_stat_statements
+WHERE query NOT LIKE '%pg_stat_statements%'
+  AND query NOT LIKE '%EXPLAIN%'
+ORDER BY mean_exec_time DESC
+LIMIT 20;
+```
+
+Focus on application queries — ignore system queries (replication slots, `pg_settings` scans, `pg_database_size`) which are Lakebase internals.
+
+### Highest Total Time (cumulative impact)
+
+Queries that consume the most total database time across all invocations:
+
+```sql
+SELECT
+  LEFT(query, 120) AS query_preview,
+  calls,
+  ROUND(total_exec_time::numeric, 2) AS total_ms,
+  ROUND(mean_exec_time::numeric, 2) AS mean_ms,
+  rows
+FROM pg_stat_statements
+WHERE query NOT LIKE '%pg_stat_statements%'
+ORDER BY total_exec_time DESC
+LIMIT 20;
+```
+
+A query with 2ms mean but 100K calls may matter more than one with 200ms mean and 4 calls.
+
+### Cache Hit Ratio
+
+Healthy databases serve >99% of reads from shared buffers. A low ratio means queries are hitting disk:
+
+```sql
+SELECT
+  ROUND(
+    100.0 * SUM(shared_blks_hit) /
+    NULLIF(SUM(shared_blks_hit) + SUM(shared_blks_read), 0), 2
+  ) AS cache_hit_pct
+FROM pg_stat_statements;
+```
+
+### Currently Running Queries
+
+Find long-running or stuck queries in real time:
+
+```sql
+SELECT
+  pid,
+  NOW() - query_start AS duration,
+  state,
+  LEFT(query, 120) AS query_preview
+FROM pg_stat_activity
+WHERE state != 'idle'
+ORDER BY duration DESC;
+```
+
+### Explain a Specific Query
+
+Get the execution plan for a slow query to understand sequential scans, missing indexes, or join strategy:
+
+```sql
+EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FORMAT JSON) <your_query>;
+```
+
+Drop `ANALYZE` to get the plan without actually executing the query.
+
+### Reset Statistics
+
+After deploying a fix, reset stats to measure the improvement from a clean baseline:
+
+```sql
+SELECT pg_stat_statements_reset();
+```
+
 ## Troubleshooting
 
 | Error | Solution |
