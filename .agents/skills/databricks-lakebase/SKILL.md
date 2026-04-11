@@ -168,7 +168,13 @@ PGPASSWORD=<token> psql "host=<ENDPOINT_HOST> dbname=<DB_NAME> sslmode=require u
 SELECT schema_name, schema_owner FROM information_schema.schemata;
 ```
 
-Tables synced by pipelines are typically owned by a `databricks_writer_XXXXX` role, not by a human user. You must run `ALTER DEFAULT PRIVILEGES` for **each distinct owner role** to cover future tables.
+Tables synced by pipelines are typically owned by a `databricks_writer_XXXXX` role, not by a human user. You must run `ALTER DEFAULT PRIVILEGES` for **each distinct owner role** to cover future tables. Check table ownership with:
+
+```sql
+SELECT tablename, tableowner FROM pg_tables WHERE schemaname = '<schema>';
+```
+
+**Gotcha:** You may not have permission to run `ALTER DEFAULT PRIVILEGES FOR ROLE "databricks_writer_XXXXX"` (requires SET ROLE). In that case, `GRANT SELECT ON ALL TABLES` covers existing tables, but you'll need to re-run it after new tables are synced. The human-user `ALTER DEFAULT PRIVILEGES` only covers tables the human creates directly.
 
 **Step 3 — Grant permissions** (replace `<SP_CLIENT_ID>` with the UUID from step above):
 
@@ -297,11 +303,17 @@ SELECT
 FROM pg_stat_statements
 WHERE query NOT LIKE '%pg_stat_statements%'
   AND query NOT LIKE '%EXPLAIN%'
+  AND query NOT LIKE '%pg_settings%'
+  AND query NOT LIKE '%pg_database_size%'
+  AND query NOT LIKE '%pg_logical_slot%'
+  AND query NOT LIKE '%pg_replication_slot%'
+  AND query NOT LIKE '%__db_system%'
+  AND query NOT LIKE '%__db_prog%'
 ORDER BY mean_exec_time DESC
 LIMIT 20;
 ```
 
-Focus on application queries — ignore system queries (replication slots, `pg_settings` scans, `pg_database_size`) which are Lakebase internals.
+**IMPORTANT**: Always include all exclusion filters above. Lakebase runs internal queries for replication, CDC, and catalog management that will dominate results if not filtered out. Focus on application queries only.
 
 ### Highest Total Time (cumulative impact)
 
@@ -316,6 +328,13 @@ SELECT
   rows
 FROM pg_stat_statements
 WHERE query NOT LIKE '%pg_stat_statements%'
+  AND query NOT LIKE '%EXPLAIN%'
+  AND query NOT LIKE '%pg_settings%'
+  AND query NOT LIKE '%pg_database_size%'
+  AND query NOT LIKE '%pg_logical_slot%'
+  AND query NOT LIKE '%pg_replication_slot%'
+  AND query NOT LIKE '%__db_system%'
+  AND query NOT LIKE '%__db_prog%'
 ORDER BY total_exec_time DESC
 LIMIT 20;
 ```
@@ -368,6 +387,33 @@ After deploying a fix, reset stats to measure the improvement from a clean basel
 SELECT pg_stat_statements_reset();
 ```
 
+## Unity Catalog Grants for Apps with Analytics + Lakebase
+
+Apps that use **both** the `analytics` plugin (SQL warehouse queries via `config/queries/*.sql`) and `lakebase` need **two layers** of grants for the SP:
+
+1. **Unity Catalog grants** — for typegen (DESCRIBE) and SQL warehouse query execution at build time and runtime
+2. **Lakebase Postgres grants** — for tRPC/pool queries at runtime
+
+UC grants use the SP's application ID (UUID) as the principal. The `CAN_CONNECT_AND_CREATE` permission on the Lakebase resource does **not** grant UC access — you must set both independently.
+
+```bash
+# Find the SP application ID
+databricks apps get <APP_NAME> --profile <PROFILE> -o json
+# → .service_principal_client_id
+
+# Grant UC catalog access (required for typegen to DESCRIBE queries)
+databricks grants update catalog <CATALOG> \
+  --json '{"changes": [{"add": ["USE_CATALOG"], "principal": "<SP_CLIENT_ID>"}]}' \
+  --profile <PROFILE>
+
+# Grant UC schema access
+databricks grants update schema <CATALOG>.<SCHEMA> \
+  --json '{"changes": [{"add": ["USE_SCHEMA", "SELECT"], "principal": "<SP_CLIENT_ID>"}]}' \
+  --profile <PROFILE>
+```
+
+Without UC grants, typegen fails with `INSUFFICIENT_PERMISSIONS` during the platform build, producing empty types (`{}`), which breaks the TypeScript compilation.
+
 ## Troubleshooting
 
 | Error | Solution |
@@ -375,6 +421,8 @@ SELECT pg_stat_statements_reset();
 | `cannot configure default credentials` | Use `--profile` flag or authenticate first |
 | `PERMISSION_DENIED` | Check workspace permissions |
 | `permission denied for schema X` | App SP lacks access to a pre-existing schema. See **App Service Principal Permissions** above |
+| `permission denied for schema appkit` | AppKit cache schema owned by a previous SP or human user. `DROP SCHEMA appkit CASCADE` so the new SP recreates it |
+| `INSUFFICIENT_PERMISSIONS` / `USE CATALOG` during typegen | SP lacks Unity Catalog grants. See **Unity Catalog Grants** above |
 | `permission denied for table X` (schema grants exist) | Table-level grants are separate from schema grants. Re-run `GRANT SELECT ON ALL TABLES IN SCHEMA ...` — the table may have been created after the original grant |
 | `must be owner of table X` | Object was created by a different role. `DROP` and let the SP recreate, or `GRANT ALL` to the SP |
 | Grants lost after `apps update` or resource change | Removing/re-adding a postgres resource revokes the SP role and all grants. Re-apply all SQL GRANTs. See **Resource Removal Revokes All Grants** above |

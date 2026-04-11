@@ -117,6 +117,30 @@ databricks bundle run <APP_RESOURCE_NAME> -t <TARGET> --profile <PROFILE>
 
 ❌ **Common mistake:** Running only `bundle deploy` and expecting the app to update. Deploy uploads code but does NOT apply config changes or restart the app. Use `databricks apps deploy` or add `bundle run` after `bundle deploy`.
 
+### Deploy Lock
+
+If a previous deploy was interrupted, you may see:
+```
+Failed to acquire deployment lock: deploy lock force acquired by <user>
+```
+Fix by running `databricks bundle deploy -t <TARGET> --profile <PROFILE> --force-lock` once to clear it, then retry `databricks apps deploy`.
+
+### Stale Workspace Files (list files timed out)
+
+Bundle sync is **incremental** — it uploads new/changed files but does **not** delete files that were previously uploaded and later added to `.gitignore`. If a prior deployment uploaded `node_modules/`, `dist/`, or other large directories, those stale files persist in the workspace and can cause the platform to timeout when listing files:
+```
+error listing files: list files timed out after 1m0s
+```
+
+**Fix:** Delete the stale directory from the workspace, then redeploy:
+```bash
+databricks workspace delete \
+  /Workspace/Users/<USER>/.bundle/<APP>/default/files/node_modules \
+  --recursive --profile <PROFILE>
+```
+
+**Prevention:** Ensure `.gitignore` includes `node_modules/`, `dist/`, `build/`, `.env`, `.databricks/` from the start — before the first `bundle deploy`.
+
 ### ⚠️ Destructive Updates Warning
 
 `databricks apps update --json` performs a **full replacement**, not a merge. If you pass a partial JSON payload, any omitted fields are **removed** from the app:
@@ -178,8 +202,67 @@ For long-running agent interactions, use **WebSockets** instead of SSE.
 | `PERMISSION_DENIED` after deploy | SP missing permissions | Grant SP access to all declared resources |
 | App deploys but config doesn't change | Only ran `bundle deploy` | Also run `bundle run <app-name>` |
 | `File is larger than 10485760 bytes` | Bundled dependencies | Use requirements.txt / package.json |
+| `list files timed out after 1m0s` | Stale `node_modules/` or other large directories in workspace from a prior deploy | Delete stale dir from workspace: `databricks workspace delete .../node_modules --recursive` |
+| `INSUFFICIENT_PERMISSIONS` during typegen build | SP lacks Unity Catalog grants | Grant `USE_CATALOG` and `USE_SCHEMA`+`SELECT` on referenced catalogs/schemas (see below) |
+| `permission denied for schema appkit` | AppKit cache schema owned by a previous SP or human user | `DROP SCHEMA appkit CASCADE` so the new SP recreates it (cache is ephemeral) |
+| `permission denied for schema X` (Lakebase) | SP lacks Postgres-level grants on pre-existing schemas | Connect as schema owner via psql and grant `USAGE`, `SELECT`/`ALL` to SP. See Lakebase skill |
 | OBO scopes missing after deploy | Destructive `apps update` wiped them | Manage scopes in `databricks.yml` with `bundle deploy` |
 | `does not have required scopes: genie` | User token issued before scope was added | User must re-authenticate (incognito or clear cookies) |
 | `permission denied for schema X` after resource change | Removing/re-adding postgres resource revokes SP grants | Re-apply all SQL GRANTs to the SP |
 | `${var.xxx}` appears literally in env | Variables not resolved in config | Use literal values, not bundle variables |
 | 504 Gateway Timeout | Request exceeded 120s | Use WebSockets for long operations |
+
+## Fresh Deployment Permissions Checklist
+
+When an app is deleted and recreated (or the postgres resource is removed and re-added), the new SP has **zero grants**. Follow this checklist:
+
+### 1. Unity Catalog Grants (for typegen and SQL warehouse queries)
+
+The SP needs access to catalogs/schemas referenced in `config/queries/*.sql`:
+
+```bash
+# Find the SP's application ID (used as the UC principal)
+databricks apps get <APP_NAME> --profile <PROFILE> -o json
+# → .service_principal_client_id
+
+# Grant catalog access
+databricks grants update catalog <CATALOG> \
+  --json '{"changes": [{"add": ["USE_CATALOG"], "principal": "<SP_CLIENT_ID>"}]}' \
+  --profile <PROFILE>
+
+# Grant schema access
+databricks grants update schema <CATALOG>.<SCHEMA> \
+  --json '{"changes": [{"add": ["USE_SCHEMA", "SELECT"], "principal": "<SP_CLIENT_ID>"}]}' \
+  --profile <PROFILE>
+```
+
+### 2. Lakebase Postgres Grants (for tRPC/pool queries)
+
+Connect to Lakebase as the schema owner and grant the SP access. See the `databricks-lakebase` skill for full details. Key steps:
+
+```bash
+# Generate credential and connect via psql
+databricks postgres generate-database-credential \
+  projects/<PROJECT>/branches/<BRANCH>/endpoints/<ENDPOINT> --profile <PROFILE>
+
+PGPASSWORD=<token> psql "host=<HOST> dbname=<DB> sslmode=require user=<EMAIL>"
+```
+
+```sql
+-- Drop stale appkit cache schema (SP will recreate it)
+DROP SCHEMA IF EXISTS appkit CASCADE;
+
+-- Grant access to each schema the app uses
+GRANT USAGE ON SCHEMA <schema> TO "<SP_CLIENT_ID>";
+GRANT SELECT ON ALL TABLES IN SCHEMA <schema> TO "<SP_CLIENT_ID>";
+
+-- For app-managed schemas, also grant write
+GRANT CREATE ON SCHEMA <schema> TO "<SP_CLIENT_ID>";
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA <schema> TO "<SP_CLIENT_ID>";
+
+-- Set default privileges for each owner role that creates tables
+ALTER DEFAULT PRIVILEGES FOR ROLE "<OWNER>" IN SCHEMA <schema>
+  GRANT SELECT ON TABLES TO "<SP_CLIENT_ID>";
+```
+
+Check table ownership with `SELECT tablename, tableowner FROM pg_tables WHERE schemaname = '<schema>';` — synced tables may be owned by a `databricks_writer_XXXXX` role rather than a human user. You need `ALTER DEFAULT PRIVILEGES` for **each distinct owner role**.
